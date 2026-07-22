@@ -123,7 +123,7 @@ export default function AdminPage() {
         <table>
           <thead>
             <tr>
-              <th></th><th>Tezgah</th><th>Kategori</th><th>Duruş</th><th>Başlangıç</th><th>Süre</th><th>Durum</th><th>Atanan</th>
+              <th></th><th>Tezgah</th><th>Kategori</th><th>Duruş</th><th>Açıklama</th><th>Başlangıç</th><th>Süre</th><th>Durum</th><th>Atanan</th>
             </tr>
           </thead>
           <tbody>
@@ -133,6 +133,7 @@ export default function AdminPage() {
                 <td>{k.tezgah}</td>
                 <td><span className={`badge badge-${k.kategori}`}>{k.kategori}</span></td>
                 <td>{k.durus_adi}</td>
+                <td className="muted" style={{ maxWidth: 260 }}>{k.aciklama}</td>
                 <td>{k.baslangic ? new Date(k.baslangic).toLocaleString('tr-TR') : '-'}</td>
                 <td>{k.sure}</td>
                 <td className={`status-${k.tamamlanma_durumu?.replace(' ', '')}`}>{k.tamamlanma_durumu}</td>
@@ -153,6 +154,7 @@ export default function AdminPage() {
                 <span className={`badge badge-${k.kategori}`}>{k.kategori}</span>
               </div>
               <div className="muted">{k.durus_adi}</div>
+              {k.aciklama && <div style={{ marginTop: 4 }}>{k.aciklama}</div>}
               <div className="muted">{k.baslangic ? new Date(k.baslangic).toLocaleString('tr-TR') : '-'} · {k.sure}</div>
               <div className={`status-${k.tamamlanma_durumu?.replace(' ', '')}`}>{k.tamamlanma_durumu}</div>
               <div className="muted">{k.personel?.ad_soyad || 'Atanmadı'}</div>

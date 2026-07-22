@@ -4,16 +4,61 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { readSession } from '@/lib/session';
 import crypto from 'crypto';
 
-// ANA VERI sayfasındaki sütun sırası (ERP export formatı ile birebir aynı olmalı)
-const COLS = [
-  'tezgah', 'vardiya', 'is_emri_detay_kodu', 'stok_kodu', 'kalip_kodu',
-  'operator', 'durus_tipi', 'durus_kodu', 'durus_adi', 'baslangic', 'bitis',
-  'sure_sn', 'sure', 'durus_maks', 'durus_maks_asim_sn', 'durus_maks_asim',
-  'ignore1', 'ignore2', 'ignore3', 'ignore4', // dti_baslangic_d_AY, dti_bitis_d_AY, SURESN_AY, SUREDK_AY (kullanılmıyor)
-  'aciklama', 'utarih', 'tesis',
-];
+// ERP export'larda sütun SIRASI değişebiliyor (örn. STOK KODU olmayabiliyor).
+// Bu yüzden sütunları sabit index yerine BAŞLIK METNİNE göre eşleştiriyoruz.
+// Aday başlıklar Türkçe karakter/boşluk farklarına karşı normalize edilerek karşılaştırılır.
+const FIELD_HEADER_CANDIDATES: Record<string, string[]> = {
+  tezgah: ['TEZGAH'],
+  vardiya: ['VARDIYA'],
+  is_emri_detay_kodu: ['IS EMRI DETAYKODU', 'IS EMRI DETAY KODU'],
+  stok_kodu: ['STOK KODU'],
+  kalip_kodu: ['KALIP KODU'],
+  operator: ['OPERATOR'],
+  durus_tipi: ['DURUS TIPI'],
+  durus_kodu: ['DURUS KODU'],
+  durus_adi: ['DURUS ADI'],
+  baslangic: ['BASLANGIC'],
+  bitis: ['BITIS'],
+  sure_sn: ['SURE SN'],
+  sure: ['SURE'],
+  durus_maks: ['DURUS MAKS'],
+  durus_maks_asim_sn: ['DURUS MAKS ASIM SN'],
+  durus_maks_asim: ['DURUS MAKS ASIM'],
+  aciklama: ['ACIKLAMA'],
+  utarih: ['UTARIH'],
+  tesis: ['TESIS'],
+};
 
 const GECERLI_KATEGORILER = ['MA', 'BA', 'KA', 'RA'];
+
+// Türkçe karakterleri ASCII karşılığına çevirip büyük harfe çevirir, kıyaslamayı
+// büyük/küçük harf ve Ş/Ğ/Ü/Ö/Ç/İ/ı farklarından bağımsız hale getirir.
+function normalizeHeader(text: any): string {
+  return (text ?? '')
+    .toString()
+    .trim()
+    .toLocaleUpperCase('tr-TR')
+    .replace(/İ/g, 'I')
+    .replace(/Ş/g, 'S')
+    .replace(/Ğ/g, 'G')
+    .replace(/Ü/g, 'U')
+    .replace(/Ö/g, 'O')
+    .replace(/Ç/g, 'C')
+    .replace(/\s+/g, ' ');
+}
+
+// Excel'deki gerçek başlık satırından, her alan için hangi sütun index'inin
+// kullanılacağını bulur. Sütun sırası ne olursa olsun doğru eşleşir.
+function buildColumnMap(headerRow: any[]): Record<string, number> {
+  const normalizedHeaders = headerRow.map(normalizeHeader);
+  const map: Record<string, number> = {};
+  for (const [field, candidates] of Object.entries(FIELD_HEADER_CANDIDATES)) {
+    const normCandidates = candidates.map(normalizeHeader);
+    const idx = normalizedHeaders.findIndex((h) => normCandidates.includes(h));
+    if (idx !== -1) map[field] = idx;
+  }
+  return map;
+}
 
 function excelDateToISO(val: any): string | null {
   if (val === null || val === undefined || val === '') return null;
@@ -52,20 +97,32 @@ export async function POST(req: NextRequest) {
   const buf = Buffer.from(await file.arrayBuffer());
   const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
 
-  // "ANA VERI" sayfasını bul (yoksa ilk sayfayı kullan)
+  // "ANA VERI" sayfasını bul (yoksa ilk sayfayı kullan - ör. tek sayfalı "Sheet")
   const sheetName = wb.SheetNames.includes('ANA VERI') ? 'ANA VERI' : wb.SheetNames[0];
   const ws = wb.Sheets[sheetName];
   const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
 
-  // İlk satır başlık -> atla
+  if (rawRows.length < 2) {
+    return NextResponse.json({ error: 'Dosyada veri satırı bulunamadı' }, { status: 400 });
+  }
+
+  const headerRow = rawRows[0];
+  const colMap = buildColumnMap(headerRow);
+
+  if (colMap.tezgah === undefined || colMap.durus_kodu === undefined) {
+    return NextResponse.json({
+      error: 'TEZGAH veya DURUŞ KODU sütunu başlıklarda bulunamadı. Excel başlık satırını kontrol edin.',
+    }, { status: 400 });
+  }
+
   const dataRows = rawRows.slice(1).filter((r) => r && r.some((c) => c !== null && c !== ''));
 
   const kayitlar = dataRows.map((r) => {
     const obj: Record<string, any> = {};
-    COLS.forEach((key, i) => {
-      if (key.startsWith('ignore')) return;
-      obj[key] = r[i] ?? null;
-    });
+    for (const field of Object.keys(FIELD_HEADER_CANDIDATES)) {
+      const idx = colMap[field];
+      obj[field] = idx !== undefined ? (r[idx] ?? null) : null;
+    }
     obj.baslangic = excelDateToISO(obj.baslangic);
     obj.bitis = excelDateToISO(obj.bitis);
     obj.vardiya = obj.vardiya ? Number(obj.vardiya) : null;
@@ -79,10 +136,12 @@ export async function POST(req: NextRequest) {
     obj.unique_key = makeUniqueKey(obj);
     obj.yukleyen_id = session.id;
     return obj;
-  }).filter((k) => k.kategori !== null); // tanımsız kategori satırlarını atla
+  }).filter((k) => k.kategori !== null); // MA/BA/KA/RA dışındaki (ör. yönetimsel duruş) satırları atla
 
   if (kayitlar.length === 0) {
-    return NextResponse.json({ error: 'Geçerli (MA/BA/KA/RA) kayıt bulunamadı' }, { status: 400 });
+    return NextResponse.json({
+      error: `Geçerli (MA/BA/KA/RA) kategoride arıza kaydı bulunamadı. Toplam ${dataRows.length} satır tarandı, hiçbiri bu 4 kategoriden birine ait değil.`,
+    }, { status: 400 });
   }
 
   const supabase = supabaseAdmin();
@@ -128,3 +187,4 @@ export async function POST(req: NextRequest) {
     kategori_dagilimi: kategoriSayaci,
   });
 }
+
