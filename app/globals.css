@@ -1,0 +1,100 @@
+:root {
+  --bg: #0b1220;
+  --panel: #131c2e;
+  --panel-2: #1a2540;
+  --border: #253251;
+  --text: #e6ebf5;
+  --muted: #8a96b3;
+  --accent: #3b82f6;
+  --ma: #f59e0b;
+  --ba: #22c55e;
+  --ka: #ef4444;
+  --ra: #a855f7;
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+.container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+h1, h2, h3 { margin: 0 0 12px 0; }
+
+input, select, textarea, button {
+  font-family: inherit;
+  font-size: 15px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 10px 12px;
+}
+
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); }
+
+button {
+  background: var(--accent);
+  border: none;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:hover { opacity: 0.9; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.secondary { background: var(--panel-2); border: 1px solid var(--border); }
+button.danger { background: var(--danger); }
+
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.badge-MA { background: rgba(245,158,11,0.15); color: var(--ma); }
+.badge-BA { background: rgba(34,197,94,0.15); color: var(--ba); }
+.badge-KA { background: rgba(239,68,68,0.15); color: var(--ka); }
+.badge-RA { background: rgba(168,85,247,0.15); color: var(--ra); }
+
+.status-Beklemede { color: var(--muted); }
+.status-Devam { color: var(--warn); }
+.status-Tamamlandı { color: var(--ok); }
+.status-İptal { color: var(--danger); }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; }
+
+.record-list { display: flex; flex-direction: column; gap: 10px; }
+.record-item {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.muted { color: var(--muted); font-size: 13px; }
+
+@media (max-width: 640px) {
+  table { display: none; }
+}
+@media (min-width: 641px) {
+  .record-list.mobile-only { display: none; }
+}
