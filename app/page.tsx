@@ -44,10 +44,8 @@ export default function LoginPage() {
             required
           />
           <input
-            placeholder="PIN"
+            placeholder="Şifre"
             type="password"
-            inputMode="numeric"
-            maxLength={6}
             value={pin}
             onChange={(e) => setPin(e.target.value)}
             required

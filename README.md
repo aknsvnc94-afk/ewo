@@ -16,14 +16,22 @@ uygulama gibi çalışır (PWA).
 
 ### 1) Supabase projesi oluştur
 1. https://supabase.com üzerinde yeni proje aç
-2. SQL Editor'e girip `supabase/schema.sql` dosyasının tamamını çalıştır
+2. SQL Editor'e girip şu sırayla çalıştır:
+   - `supabase/schema.sql`
+   - `supabase/schema_v2_ewo_form.sql`
+   - `supabase/schema_v3_guncelleme.sql`
 3. Kendi admin kullanıcını ekle (PIN'i kendi belirlediğinle değiştir):
    ```sql
    insert into personel (ad_soyad, kullanici_adi, pin_hash, rol)
-   values ('Akın Sevinç', 'akin', crypt('SENIN_PININ', gen_salt('bf')), 'admin');
+   values ('Akın Sevinç', 'akin', crypt('SENIN_SIFREN', gen_salt('bf')), 'admin');
    ```
-4. Bakım personelini de aynı şekilde ekle (rol = 'personel')
-5. Settings > API sayfasından `Project URL` ve `service_role` key'i kopyala
+   (Diğer personelleri artık `/admin/personel` sayfasından, SQL yazmadan ekleyebilir/düzenleyebilir/silebilirsin.)
+4. Settings > API sayfasından `Project URL` ve `service_role`/`secret` key'i kopyala
+5. **Storage bucket oluştur (fotoğraf yüklemeleri için):**
+   - Sol menüden **Storage** → **New bucket**
+   - İsim: `cozum-resimleri`
+   - **Public bucket** seçeneğini AÇIK bırak (fotoğrafların görüntülenebilmesi için gerekli)
+   - Create
 
 ### 2) Ortam değişkenleri
 `.env.example` dosyasını `.env.local` olarak kopyala ve Supabase bilgilerini gir:
@@ -51,17 +59,30 @@ Vercel adresini telefonda tarayıcıda aç → paylaş/menü > "Ana Ekrana Ekle"
 Artık uygulama gibi ikonla açılır.
 
 ## Kullanım Akışı
-1. **Admin (sen):** ERP'den ANA VERİ formatında Excel export al → `/admin` sayfasından yükle
-   → sistem otomatik olarak DURUŞ KODU'na göre MA/BA/KA/RA kategorilerine ayırır,
-   mükerrer kayıtları atlar
-2. **Admin:** Kayıtları seç → ilgili personele topluca ata
-3. **Personel:** Telefonundan `/personel` sayfasını açar, kendine atanan kayıtları görür,
-   "Detay Doldur" ile Aksiyon / Kök Neden / Hedef Tarih / Tamamlanma Durumu girer
+1. **Admin (sen):** `/admin/personel` sayfasından bakım personeline kullanıcı adı + şifre tanımla
+   (düzenleme, şifre sıfırlama, pasif yapma ve silme seçenekleri de burada)
+2. **Admin:** ERP'den Excel export al → `/admin` sayfasından yükle (tarayıcıda parse edilir,
+   4.5MB sunucu sınırına takılmaz), MA/BA/KA/RA'ya otomatik ayrılır, mükerrer kayıtlar atlanır
+3. **Admin:** Kayıtları filtrele/sırala (tarih, süre, tezgah), seç → personele topluca ata
+4. **Personel:** `/personel`'de kendine atanan kayıtları ve özet sayılarını (toplam/bekleyen/
+   onay bekleyen/onaylı) görür. Bir kayda dokunduğunda:
+   - **20 dakikadan KISA duruşlarda:** sadece "Tamamlandı" işaretler, form yok
+   - **20 dakikadan UZUN duruşlarda:** Arıza Türü + Arızanın Tanımı + Direk Sebep ve Çözümü
+     (en az 10 karakter, boş bırakılamaz) + isteğe bağlı fotoğraf ekler, "Tamamla ve Gönder" der
+     → kayıt "Onay Bekliyor" durumuna geçer
+5. **Admin:** `/admin` üzerinden "İncele" ile (sadece 20dk üzeri kayıtlarda görünür) zaman
+   çizelgesi, 5 Neden analizi, Kök Sebep Tipi (Çalışma koşullarının izlenmemesi / Proje
+   zayıflığı / Dış etkenler / Temel şartların eksikliği / Yetersiz bakım / Eksik beceri-yetkinlik),
+   önlemler ve sonucu doldurur; "Üretim Başlangıcını Hesapla" ile bitiş saatini
+   arıza başlangıcı + süreden otomatik alabilir. Sonra **Onaylar** veya **Personele geri gönderir**
+6. **Admin/Personel:** "PDF Görüntüle/İndir" ile formu orijinal EWO (F13-31) formatında
+   yazdırılabilir görünümde açar, tarayıcının "Yazdır > PDF olarak kaydet" seçeneğiyle indirir
+7. **Admin:** Ana panelde personel bazlı atanan iş sayısı grafiğini görür
 
 ## Sonraki Aşamalar (yol haritası)
 - [ ] Telegram bot ile yeni atama bildirimi (senin AnKA GLC botunla entegre edilebilir)
-- [ ] Pareto/KPI dashboard sayfası (mevcut bakim_panel.html mantığıyla)
-- [ ] Admin'den yeni personel ekleme arayüzü (şu an SQL ile ekleniyor)
+- [ ] Pareto/KPI dashboard sayfası — kök neden türü, kategori (MA/BA/KA/RA) ve tezgah
+      bazında toplam duruş süresi analizleri
 - [ ] Excel'e geri dışa aktarma (raporlama için)
 - [ ] Gerçek PWA ikonları (public/icon-192.png, icon-512.png ekle)
 

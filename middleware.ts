@@ -6,7 +6,7 @@ export function middleware(req: NextRequest) {
   const cookie = req.cookies.get('ewo_session')?.value;
   const { pathname } = req.nextUrl;
 
-  const korumaliYollar = ['/admin', '/personel'];
+  const korumaliYollar = ['/admin', '/personel', '/pdf'];
   const korumaliMi = korumaliYollar.some((p) => pathname.startsWith(p));
 
   if (korumaliMi && !cookie) {
@@ -17,5 +17,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/personel/:path*'],
+  matcher: ['/admin/:path*', '/personel/:path*', '/pdf/:path*'],
 };
