@@ -1,19 +1,21 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { parseExcelBuffer } from '@/lib/excelParse';
 
 type Kayit = {
   id: string;
   tezgah: string;
   kategori: 'MA' | 'BA' | 'KA' | 'RA';
   durus_adi: string;
+  aciklama: string;
   baslangic: string;
   sure: string;
-  aciklama: string;
   tamamlanma_durumu: string;
   personel: { ad_soyad: string } | null;
 };
 
-type Personel = { id: string; ad_soyad: string };
+type Personel = { id: string; ad_soyad: string; aktif: boolean };
 
 export default function AdminPage() {
   const [kayitlar, setKayitlar] = useState<Kayit[]>([]);
@@ -34,7 +36,7 @@ export default function AdminPage() {
   async function personelGetir() {
     const res = await fetch('/api/personel');
     const data = await res.json();
-    setPersonelListesi(data.personel || []);
+    setPersonelListesi((data.personel || []).filter((p: Personel) => p.aktif));
   }
 
   useEffect(() => {
@@ -46,11 +48,26 @@ export default function AdminPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setYukleniyor(true);
-    setMesaj('');
-    const fd = new FormData();
-    fd.append('file', file);
+    setMesaj('Dosya okunuyor...');
     try {
-      const res = await fetch('/api/import', { method: 'POST', body: fd });
+      const buf = await file.arrayBuffer();
+      const { kayitlar, toplamSatir, hata } = parseExcelBuffer(buf);
+
+      if (hata) {
+        setMesaj(`Hata: ${hata}`);
+        return;
+      }
+      if (kayitlar.length === 0) {
+        setMesaj(`Toplam ${toplamSatir} satır tarandı, MA/BA/KA/RA kategorisinde geçerli arıza kaydı bulunamadı.`);
+        return;
+      }
+
+      setMesaj(`${kayitlar.length} kayıt bulundu, sunucuya gönderiliyor...`);
+      const res = await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kayitlar, toplamSatir }),
+      });
       const data = await res.json();
       if (!res.ok) {
         setMesaj(`Hata: ${data.error}`);
@@ -58,6 +75,8 @@ export default function AdminPage() {
         setMesaj(`✓ ${data.eklenen} yeni kayıt eklendi (${data.atlanan_mukerrer} mükerrer atlandı)`);
         verileriGetir();
       }
+    } catch (err: any) {
+      setMesaj(`Hata: Dosya okunamadı (${err?.message || 'bilinmeyen hata'})`);
     } finally {
       setYukleniyor(false);
       e.target.value = '';
@@ -87,7 +106,10 @@ export default function AdminPage() {
 
   return (
     <div className="container">
-      <h1>Admin Paneli</h1>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <h1>Admin Paneli</h1>
+        <Link href="/admin/personel"><button className="secondary">Personel Yönetimi</button></Link>
+      </div>
 
       <div className="card">
         <h3>ERP Excel Yükle</h3>
@@ -123,7 +145,7 @@ export default function AdminPage() {
         <table>
           <thead>
             <tr>
-              <th></th><th>Tezgah</th><th>Kategori</th><th>Duruş</th><th>Açıklama</th><th>Başlangıç</th><th>Süre</th><th>Durum</th><th>Atanan</th>
+              <th></th><th>Tezgah</th><th>Kategori</th><th>Duruş</th><th>Açıklama</th><th>Başlangıç</th><th>Süre</th><th>Durum</th><th>Atanan</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -138,6 +160,7 @@ export default function AdminPage() {
                 <td>{k.sure}</td>
                 <td className={`status-${k.tamamlanma_durumu?.replace(' ', '')}`}>{k.tamamlanma_durumu}</td>
                 <td>{k.personel?.ad_soyad || <span className="muted">Atanmadı</span>}</td>
+                <td><Link href={`/admin/kayit/${k.id}`}><button className="secondary">İncele</button></Link></td>
               </tr>
             ))}
           </tbody>
@@ -158,6 +181,7 @@ export default function AdminPage() {
               <div className="muted">{k.baslangic ? new Date(k.baslangic).toLocaleString('tr-TR') : '-'} · {k.sure}</div>
               <div className={`status-${k.tamamlanma_durumu?.replace(' ', '')}`}>{k.tamamlanma_durumu}</div>
               <div className="muted">{k.personel?.ad_soyad || 'Atanmadı'}</div>
+              <Link href={`/admin/kayit/${k.id}`}><button className="secondary" style={{ marginTop: 8 }}>İncele</button></Link>
             </div>
           ))}
         </div>
