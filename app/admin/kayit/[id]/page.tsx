@@ -39,7 +39,7 @@ export default function AdminKayitFormu() {
   const id = params?.id as string;
   const [kayit, setKayit] = useState<any>(null);
   const [form, setForm] = useState<any>(null);
-  const [personelListesi, setPersonelListesi] = useState<{ id: string; ad_soyad: string }[]>([]);
+  const [personelListesi, setPersonelListesi] = useState<{ id: string; ad_soyad: string; rol: string }[]>([]);
   const [mesaj, setMesaj] = useState('');
   const [isleniyor, setIsleniyor] = useState(false);
 
@@ -262,7 +262,12 @@ export default function AdminKayitFormu() {
       <div className="card">
         <h3>Sonuç</h3>
         <label className="muted">Analiz sorumlusu
-          <input value={form.analiz_sorumlusu} onChange={(e) => alan('analiz_sorumlusu', e.target.value)} style={{ width: '100%', marginTop: 4 }} />
+          <select value={form.analiz_sorumlusu} onChange={(e) => alan('analiz_sorumlusu', e.target.value)} style={{ width: '100%', marginTop: 4 }}>
+            <option value="">Seçiniz...</option>
+            {personelListesi.filter((p) => p.rol === 'admin').map((p) => (
+              <option key={p.id} value={p.ad_soyad}>{p.ad_soyad}</option>
+            ))}
+          </select>
         </label>
         <label className="muted" style={{ display: 'block', marginTop: 10 }}>Sonuç
           <textarea value={form.sonuc} onChange={(e) => alan('sonuc', e.target.value)} rows={3} style={{ width: '100%', marginTop: 4 }} />

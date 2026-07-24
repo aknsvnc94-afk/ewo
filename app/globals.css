@@ -72,6 +72,7 @@ button.danger { background: var(--danger); }
 .badge-BA { background: rgba(34,197,94,0.15); color: var(--ba); }
 .badge-KA { background: rgba(239,68,68,0.15); color: var(--ka); }
 .badge-RA { background: rgba(168,85,247,0.15); color: var(--ra); }
+.badge-GT { background: rgba(100,116,139,0.15); color: #94a3b8; }
 
 .status-Beklemede { color: var(--muted); }
 .status-Devam { color: var(--warn); }

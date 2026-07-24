@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   if (!tezgah || !kategori || !durus_adi) {
     return NextResponse.json({ error: 'Tezgah, kategori ve duruş adı gerekli' }, { status: 400 });
   }
-  if (!['MA', 'BA', 'KA', 'RA'].includes(kategori)) {
+  if (!['MA', 'BA', 'KA', 'RA', 'GT'].includes(kategori)) {
     return NextResponse.json({ error: 'Geçersiz kategori' }, { status: 400 });
   }
 

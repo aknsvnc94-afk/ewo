@@ -31,7 +31,8 @@ export default function EwoAnalizPage() {
   const bolum = BOLUMLER.find((b) => b.kod === aktifBolum)!;
 
   const veri = useMemo(() => {
-    const buBolumKayitlari = kayitlar.filter((k) => k.kategori === aktifBolum && (k.sure_sn || 0) > EWO_ESIK_SANIYE);
+    const tumBolumKayitlari = kayitlar.filter((k) => k.kategori === aktifBolum);
+    const buBolumKayitlari = tumBolumKayitlari.filter((k) => (k.sure_sn || 0) > EWO_ESIK_SANIYE);
 
     // Pareto: grup alanına göre say, azalan sırala, kümülatif % hesapla
     const sayac: Record<string, number> = {};
@@ -61,7 +62,11 @@ export default function EwoAnalizPage() {
       .sort((a, b) => b[1] - a[1])
       .map(([neden, adet]) => ({ neden, adet, yuzde: toplam ? (adet / toplam) * 100 : 0 }));
 
-    return { toplam, paretoSatirlari, acik, kapali, kokNedenSatirlari };
+    return {
+      toplam, paretoSatirlari, acik, kapali, kokNedenSatirlari,
+      tumArizaSayisi: tumBolumKayitlari.length,
+      yirmiDkOrani: tumBolumKayitlari.length ? (toplam / tumBolumKayitlari.length) * 100 : 0,
+    };
   }, [kayitlar, aktifBolum, bolum.grupAlan]);
 
   return (
@@ -88,6 +93,10 @@ export default function EwoAnalizPage() {
         <>
           <div className="row" style={{ marginBottom: 14, flexWrap: 'wrap' }}>
             <div className="card" style={{ flex: 1, minWidth: 100, textAlign: 'center', margin: 0 }}>
+              <div style={{ fontSize: 24, fontWeight: 700 }}>{veri.tumArizaSayisi}</div>
+              <div className="muted">Toplam Arıza ({bolum.kod}, tüm süreler)</div>
+            </div>
+            <div className="card" style={{ flex: 1, minWidth: 100, textAlign: 'center', margin: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 700 }}>{veri.toplam}</div>
               <div className="muted">Toplam EWO ({bolum.kod})</div>
             </div>
@@ -98,6 +107,18 @@ export default function EwoAnalizPage() {
             <div className="card" style={{ flex: 1, minWidth: 100, textAlign: 'center', margin: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 700 }} className="status-Tamamlandı">{veri.kapali}</div>
               <div className="muted">Kapalı (Onaylı) EWO</div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3>{bolum.baslik} — 20 Dakika Üzeri Arıza Oranı</h3>
+            <p className="muted">Bu kategorideki tüm arızaların (süre fark etmeksizin) kaçı 20 dakikayı aşıp EWO gerektirdi.</p>
+            <div className="row" style={{ justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+              <span>{veri.toplam} / {veri.tumArizaSayisi} arıza EWO gerektirdi</span>
+              <span className="muted">%{veri.yirmiDkOrani.toFixed(0)}</span>
+            </div>
+            <div style={{ background: 'var(--panel-2)', borderRadius: 6, overflow: 'hidden', height: 20 }}>
+              <div style={{ width: `${veri.yirmiDkOrani}%`, background: 'var(--warn)', height: '100%' }} />
             </div>
           </div>
 

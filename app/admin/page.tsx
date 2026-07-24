@@ -4,14 +4,14 @@ import Link from 'next/link';
 import { parseExcelBuffer } from '@/lib/excelParse';
 
 const EWO_ESIK_SANIYE = 20 * 60;
-const KATEGORILER = ['MA', 'BA', 'KA', 'RA'];
+const KATEGORILER = ['MA', 'BA', 'KA', 'RA', 'GT'];
 
 type Kayit = {
   id: string;
   sira_no: string | null;
   is_emri_detay_kodu: string | null;
   tezgah: string;
-  kategori: 'MA' | 'BA' | 'KA' | 'RA';
+  kategori: 'MA' | 'BA' | 'KA' | 'RA' | 'GT';
   durus_adi: string;
   aciklama: string;
   kalip_kodu: string | null;
@@ -34,6 +34,7 @@ export default function AdminPage() {
   const [atanacakPersonel, setAtanacakPersonel] = useState('');
   const [kategoriFiltre, setKategoriFiltre] = useState('');
   const [durumFiltre, setDurumFiltre] = useState('');
+  const [tezgahFiltre, setTezgahFiltre] = useState('');
   const [siralama, setSiralama] = useState<SiralamaAnahtari>('tarih_azalan');
   const [yukleniyor, setYukleniyor] = useState(false);
   const [mesaj, setMesaj] = useState('');
@@ -180,6 +181,7 @@ export default function AdminPage() {
   const siraliKayitlar = useMemo(() => {
     let liste = [...kayitlar];
     if (durumFiltre) liste = liste.filter((k) => k.tamamlanma_durumu === durumFiltre);
+    if (tezgahFiltre) liste = liste.filter((k) => k.tezgah === tezgahFiltre);
     switch (siralama) {
       case 'tarih_artan': return liste.sort((a, b) => new Date(a.baslangic).getTime() - new Date(b.baslangic).getTime());
       case 'tarih_azalan': return liste.sort((a, b) => new Date(b.baslangic).getTime() - new Date(a.baslangic).getTime());
@@ -188,7 +190,11 @@ export default function AdminPage() {
       case 'tezgah_az': return liste.sort((a, b) => (a.tezgah || '').localeCompare(b.tezgah || ''));
       default: return liste;
     }
-  }, [kayitlar, siralama, durumFiltre]);
+  }, [kayitlar, siralama, durumFiltre, tezgahFiltre]);
+
+  const tezgahListesi = useMemo(() => {
+    return Array.from(new Set(kayitlar.map((k) => k.tezgah).filter(Boolean))).sort();
+  }, [kayitlar]);
 
   const onayBekleyenSayisi = useMemo(() => kayitlar.filter((k) => k.tamamlanma_durumu === 'Onay Bekliyor').length, [kayitlar]);
 
@@ -256,6 +262,7 @@ export default function AdminPage() {
               <option value="BA">BA - Montaj Banko Arızası</option>
               <option value="KA">KA - Kalıp Arızası</option>
               <option value="RA">RA - Robot Arızası</option>
+              <option value="GT">GT - Genel Tesis</option>
             </select>
             <select value={durumFiltre} onChange={(e) => setDurumFiltre(e.target.value)}>
               <option value="">Tüm Durumlar</option>
@@ -264,6 +271,10 @@ export default function AdminPage() {
               <option value="Onay Bekliyor">Onay Bekliyor</option>
               <option value="Tamamlandı">Tamamlandı</option>
               <option value="İptal">İptal</option>
+            </select>
+            <select value={tezgahFiltre} onChange={(e) => setTezgahFiltre(e.target.value)}>
+              <option value="">Tüm Makineler</option>
+              {tezgahListesi.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
             <select value={siralama} onChange={(e) => setSiralama(e.target.value as SiralamaAnahtari)}>
               <option value="tarih_azalan">Tarih (Yeni → Eski)</option>

@@ -92,6 +92,7 @@ export default function YeniKayitPage() {
                 <option value="BA">BA - Montaj Banko Arızası</option>
                 <option value="KA">KA - Kalıp Arızası</option>
                 <option value="RA">RA - Robot Arızası</option>
+                <option value="GT">GT - Genel Tesis</option>
               </select>
             </label>
             {kategori === 'KA' && (
