@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('ariza_kayitlari')
     .select(`
-      id, tezgah, vardiya, durus_kodu, durus_adi, baslangic, bitis, sure, aciklama,
+      id, tezgah, vardiya, durus_kodu, durus_adi, baslangic, bitis, sure, sure_sn, aciklama, kalip_kodu,
       kategori, aksiyon, hedef_tarih, tamamlanma_durumu, kok_neden_turu,
       atanan_personel_id, personel:atanan_personel_id ( ad_soyad )
     `)

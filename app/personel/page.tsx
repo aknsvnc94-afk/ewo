@@ -24,9 +24,37 @@ export default function PersonelPage() {
 
   useEffect(() => { verileriGetir(); }, []);
 
+  const toplam = kayitlar.length;
+  const tamamlanan = kayitlar.filter((k) => k.tamamlanma_durumu === 'Tamamlandı').length;
+  const onayBekleyen = kayitlar.filter((k) => k.tamamlanma_durumu === 'Onay Bekliyor').length;
+  const bekleyen = kayitlar.filter((k) => ['Beklemede', 'Devam Ediyor'].includes(k.tamamlanma_durumu)).length;
+
   return (
     <div className="container">
-      <h1>Bana Atanan Arızalar</h1>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <h1>Bana Atanan Arızalar</h1>
+        <Link href="/personel/aksiyonlar"><button className="secondary">Aksiyonlarım</button></Link>
+      </div>
+
+      <div className="row" style={{ marginBottom: 14 }}>
+        <div className="card" style={{ flex: 1, minWidth: 100, textAlign: 'center', margin: 0 }}>
+          <div style={{ fontSize: 24, fontWeight: 700 }}>{toplam}</div>
+          <div className="muted">Toplam Atanan</div>
+        </div>
+        <div className="card" style={{ flex: 1, minWidth: 100, textAlign: 'center', margin: 0 }}>
+          <div style={{ fontSize: 24, fontWeight: 700 }} className="status-Beklemede">{bekleyen}</div>
+          <div className="muted">Bekleyen</div>
+        </div>
+        <div className="card" style={{ flex: 1, minWidth: 100, textAlign: 'center', margin: 0 }}>
+          <div style={{ fontSize: 24, fontWeight: 700 }} className="status-Devam">{onayBekleyen}</div>
+          <div className="muted">Onay Bekliyor</div>
+        </div>
+        <div className="card" style={{ flex: 1, minWidth: 100, textAlign: 'center', margin: 0 }}>
+          <div style={{ fontSize: 24, fontWeight: 700 }} className="status-Tamamlandı">{tamamlanan}</div>
+          <div className="muted">Admin Onaylı</div>
+        </div>
+      </div>
+
       <div className="record-list">
         {kayitlar.length === 0 && <p className="muted">Şu anda size atanmış kayıt yok.</p>}
         {kayitlar.map((k) => (

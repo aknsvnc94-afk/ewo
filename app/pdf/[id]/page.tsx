@@ -121,7 +121,7 @@ export default function PdfGorunumuPage() {
               <tr key={i}>
                 <td>{i + 1}</td>
                 <td>{onlemlerKok[i]?.aciklama || ''}</td>
-                <td>{onlemlerKok[i] ? `${onlemlerKok[i].sorumlu || ''} / ${onlemlerKok[i].plan_tarihi || ''}` : ''}</td>
+                <td>{onlemlerKok[i] ? `${onlemlerKok[i].sorumlu_ad_soyad || ''} / ${onlemlerKok[i].plan_tarihi || ''}` : ''}</td>
               </tr>
             ))}
           </tbody>
@@ -136,7 +136,7 @@ export default function PdfGorunumuPage() {
               <tr key={i}>
                 <td>{i + 1}</td>
                 <td>{onlemlerSifir[i]?.aciklama || ''}</td>
-                <td>{onlemlerSifir[i] ? `${onlemlerSifir[i].sorumlu || ''} / ${onlemlerSifir[i].plan_tarihi || ''}` : ''}</td>
+                <td>{onlemlerSifir[i] ? `${onlemlerSifir[i].sorumlu_ad_soyad || ''} / ${onlemlerSifir[i].plan_tarihi || ''}` : ''}</td>
               </tr>
             ))}
           </tbody>
