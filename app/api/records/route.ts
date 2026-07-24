@@ -3,36 +3,55 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { readSession } from '@/lib/session';
 import crypto from 'crypto';
 
+export const maxDuration = 30;
+
 export async function GET(req: NextRequest) {
   const session = readSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
 
   const supabase = supabaseAdmin();
-  let query = supabase
-    .from('ariza_kayitlari')
-    .select(`
-      id, sira_no, is_emri_detay_kodu, tezgah, vardiya, durus_kodu, durus_adi, baslangic, bitis, sure, sure_sn, aciklama, kalip_kodu,
-      kategori, aksiyon, hedef_tarih, tamamlanma_durumu, kok_neden_turu,
-      atanan_personel_id, personel:atanan_personel_id ( ad_soyad )
-    `)
-    .order('baslangic', { ascending: false })
-    .limit(5000);
 
-  // Personel sadece kendine atanan kayıtları görür; admin hepsini görür
-  if (session.rol === 'personel') {
-    query = query.eq('atanan_personel_id', session.id);
+  function sorguOlustur() {
+    let query = supabase
+      .from('ariza_kayitlari')
+      .select(`
+        id, sira_no, is_emri_detay_kodu, tezgah, vardiya, durus_kodu, durus_adi, baslangic, bitis, sure, sure_sn, aciklama, kalip_kodu,
+        kategori, aksiyon, hedef_tarih, tamamlanma_durumu, kok_neden_turu,
+        atanan_personel_id, personel:atanan_personel_id ( ad_soyad )
+      `)
+      .order('baslangic', { ascending: false });
+
+    // Personel sadece kendine atanan kayıtları görür; admin hepsini görür
+    if (session!.rol === 'personel') {
+      query = query.eq('atanan_personel_id', session!.id);
+    }
+
+    const kategori = req.nextUrl.searchParams.get('kategori');
+    if (kategori) query = query.eq('kategori', kategori);
+
+    const durum = req.nextUrl.searchParams.get('durum');
+    if (durum) query = query.eq('tamamlanma_durumu', durum);
+
+    return query;
   }
 
-  const kategori = req.nextUrl.searchParams.get('kategori');
-  if (kategori) query = query.eq('kategori', kategori);
+  // Supabase/PostgREST tek istekte varsayılan olarak en fazla 1000 satır döner.
+  // Bu sınırı aşmak için 1000'erlik sayfalar halinde tüm sonuçları çekip birleştiriyoruz.
+  const SAYFA_BOYUTU = 1000;
+  let tumKayitlar: any[] = [];
+  let sayfa = 0;
+  while (true) {
+    const bas = sayfa * SAYFA_BOYUTU;
+    const bit = bas + SAYFA_BOYUTU - 1;
+    const { data, error } = await sorguOlustur().range(bas, bit);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    tumKayitlar = tumKayitlar.concat(data || []);
+    if (!data || data.length < SAYFA_BOYUTU) break;
+    sayfa += 1;
+    if (sayfa > 20) break; // güvenlik: en fazla 20.000 kayıt
+  }
 
-  const durum = req.nextUrl.searchParams.get('durum');
-  if (durum) query = query.eq('tamamlanma_durumu', durum);
-
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json({ kayitlar: data });
+  return NextResponse.json({ kayitlar: tumKayitlar });
 }
 
 export async function POST(req: NextRequest) {
