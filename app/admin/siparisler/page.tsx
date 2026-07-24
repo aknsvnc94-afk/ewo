@@ -75,17 +75,6 @@ export default function SiparislerPage() {
                   {s.tarih ? `Talep Tarihi: ${s.tarih} · ` : ''}
                   Yüklenme: {new Date(s.yuklenme_tarihi).toLocaleString('tr-TR')} · Yükleyen: {s.yukleyen?.ad_soyad || '-'}
                 </div>
-                <div className="row" style={{ marginTop: 6, fontSize: 12 }}>
-                  <span className={s.departman_onayi ? 'status-Tamamlandı' : 'status-Beklemede'}>
-                    {s.departman_onayi ? '✓' : '○'} Departman
-                  </span>
-                  <span className={s.satinalma_onayi ? 'status-Tamamlandı' : 'status-Beklemede'}>
-                    {s.satinalma_onayi ? '✓' : '○'} Satın Alma
-                  </span>
-                  <span className={s.talep_onayi ? 'status-Tamamlandı' : 'status-Beklemede'}>
-                    {s.talep_onayi ? '✓' : '○'} Talep Onayı
-                  </span>
-                </div>
               </div>
             </Link>
           ))}

@@ -29,6 +29,7 @@ export default function SiparisDetayPage() {
   const id = params?.id as string;
   const [siparis, setSiparis] = useState<any>(null);
   const [kalemler, setKalemler] = useState<Kalem[]>([]);
+  const [isleniyor, setIsleniyor] = useState<string | null>(null);
 
   async function getir() {
     const res = await fetch(`/api/siparis/${id}`);
@@ -40,12 +41,16 @@ export default function SiparisDetayPage() {
 
   useEffect(() => { getir(); }, [id]);
 
-  async function onayDegistir(alan: 'departman_onayi' | 'satinalma_onayi' | 'talep_onayi', deger: boolean) {
-    await fetch(`/api/siparis/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [alan]: deger }),
-    });
-    getir();
+  async function alindiIsaretle(kalemId: string, deger: boolean) {
+    setIsleniyor(kalemId);
+    try {
+      await fetch(`/api/siparis-kalemi/${kalemId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alindi: deger }),
+      });
+      await getir();
+    } finally {
+      setIsleniyor(null);
+    }
   }
 
   if (!siparis) return <div className="container"><p className="muted">Yükleniyor...</p></div>;
@@ -67,44 +72,18 @@ export default function SiparisDetayPage() {
       </p>
 
       <div className="card">
-        <h3>Onay Adımları</h3>
-        <div className="row" style={{ flexWrap: 'wrap' }}>
-          {([
-            ['departman_onayi', 'departman_onay_tarihi', 'Departman Sorumlusu Onayı'],
-            ['satinalma_onayi', 'satinalma_onay_tarihi', 'Satın Alma Sorumlusu Onayı'],
-            ['talep_onayi', 'talep_onay_tarihi', 'Talep Onayı'],
-          ] as const).map(([alan, tarihAlani, etiket]) => (
-            <div key={alan} className="card" style={{ flex: 1, minWidth: 200, margin: 0 }}>
-              <div className={siparis[alan] ? 'status-Tamamlandı' : 'status-Beklemede'} style={{ fontWeight: 700, marginBottom: 6 }}>
-                {siparis[alan] ? '✓ Onaylandı' : 'Bekliyor'}
-              </div>
-              <div className="muted" style={{ marginBottom: 8 }}>{etiket}</div>
-              {siparis[alan] && siparis[tarihAlani] && (
-                <div className="muted" style={{ marginBottom: 8, fontSize: 12 }}>{new Date(siparis[tarihAlani]).toLocaleString('tr-TR')}</div>
-              )}
-              <button
-                className={siparis[alan] ? 'secondary' : ''}
-                onClick={() => onayDegistir(alan, !siparis[alan])}
-              >
-                {siparis[alan] ? 'Onayı Kaldır' : 'Onayla'}
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="card">
         <h3>Kalemler ({alinan}/{kalemler.length} alındı)</h3>
         <table>
-          <thead><tr><th>#</th><th>Stok Kodu</th><th>Açıklama</th><th>Miktar</th><th>Teslim Tarihi</th><th>Durum</th><th>Alan</th><th>Tarih/Saat</th></tr></thead>
+          <thead><tr><th>#</th><th>Stok Kodu</th><th>Açıklama</th><th>Miktar</th><th>Teslim Tarihi</th><th>Durum</th><th>Alan</th><th>Tarih/Saat</th><th></th></tr></thead>
           <tbody>
             {kalemler.map((k, i) => {
               const gecikmis = gecikmisMi(k.teslim_tarihi, k.alindi);
+              const aciklama = k.stok_kodu ? k.satir_metni.split('—')[1]?.split('|')[0]?.trim() : k.satir_metni;
               return (
                 <tr key={k.id}>
                   <td>{i + 1}</td>
                   <td>{k.stok_kodu || '-'}</td>
-                  <td>{k.stok_kodu ? k.satir_metni.split('—')[1]?.split('|')[0]?.trim() : k.satir_metni}</td>
+                  <td>{aciklama}</td>
                   <td>{k.miktar || '-'}</td>
                   <td style={{ color: gecikmis ? 'var(--danger)' : undefined, fontWeight: gecikmis ? 700 : undefined }}>
                     {k.teslim_tarihi || '-'} {gecikmis ? '(GECİKMİŞ)' : ''}
@@ -112,21 +91,43 @@ export default function SiparisDetayPage() {
                   <td className={k.alindi ? 'status-Tamamlandı' : 'status-Beklemede'}>{k.alindi ? 'Alındı' : 'Bekliyor'}</td>
                   <td>{k.alan?.ad_soyad || '-'}</td>
                   <td>{k.alinma_tarihi ? new Date(k.alinma_tarihi).toLocaleString('tr-TR') : '-'}</td>
+                  <td>
+                    {k.alindi ? (
+                      <button className="secondary" onClick={() => alindiIsaretle(k.id, false)} disabled={isleniyor === k.id}>Geri Al</button>
+                    ) : (
+                      <button onClick={() => alindiIsaretle(k.id, true)} disabled={isleniyor === k.id}>
+                        {isleniyor === k.id ? '...' : 'Alındı'}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+
         <div className="record-list mobile-only">
           {kalemler.map((k, i) => {
             const gecikmis = gecikmisMi(k.teslim_tarihi, k.alindi);
+            const aciklama = k.stok_kodu ? k.satir_metni.split('—')[1]?.split('|')[0]?.trim() : k.satir_metni;
             return (
               <div key={k.id} className="record-item" style={{ borderLeft: gecikmis ? '4px solid var(--danger)' : undefined }}>
-                <div>{i + 1}. {k.stok_kodu ? `${k.stok_kodu} — ` : ''}{k.stok_kodu ? k.satir_metni.split('—')[1]?.split('|')[0]?.trim() : k.satir_metni}</div>
+                <div>{i + 1}. {k.stok_kodu ? `${k.stok_kodu} — ` : ''}{aciklama}</div>
                 {k.miktar && <div className="muted">Miktar: {k.miktar}</div>}
-                {k.teslim_tarihi && <div className={gecikmis ? '' : 'muted'} style={{ color: gecikmis ? 'var(--danger)' : undefined, fontWeight: gecikmis ? 700 : undefined }}>Teslim: {k.teslim_tarihi} {gecikmis ? '(GECİKMİŞ)' : ''}</div>}
+                {k.teslim_tarihi && (
+                  <div style={{ color: gecikmis ? 'var(--danger)' : undefined, fontWeight: gecikmis ? 700 : undefined }} className={gecikmis ? '' : 'muted'}>
+                    Teslim: {k.teslim_tarihi} {gecikmis ? '(GECİKMİŞ)' : ''}
+                  </div>
+                )}
                 <div className={k.alindi ? 'status-Tamamlandı' : 'status-Beklemede'}>{k.alindi ? 'Alındı' : 'Bekliyor'}</div>
                 {k.alindi && <div className="muted">{k.alan?.ad_soyad} · {k.alinma_tarihi ? new Date(k.alinma_tarihi).toLocaleString('tr-TR') : ''}</div>}
+                {k.alindi ? (
+                  <button className="secondary" style={{ marginTop: 8 }} onClick={() => alindiIsaretle(k.id, false)} disabled={isleniyor === k.id}>Geri Al</button>
+                ) : (
+                  <button style={{ marginTop: 8 }} onClick={() => alindiIsaretle(k.id, true)} disabled={isleniyor === k.id}>
+                    {isleniyor === k.id ? 'İşleniyor...' : 'Alındı'}
+                  </button>
+                )}
               </div>
             );
           })}

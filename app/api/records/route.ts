@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       atanan_personel_id, personel:atanan_personel_id ( ad_soyad )
     `)
     .order('baslangic', { ascending: false })
-    .limit(500);
+    .limit(5000);
 
   // Personel sadece kendine atanan kayıtları görür; admin hepsini görür
   if (session.rol === 'personel') {
