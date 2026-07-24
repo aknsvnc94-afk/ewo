@@ -4,7 +4,7 @@ import { readSession } from '@/lib/session';
 
 const ALLOWED_STATUS = ['Beklemede', 'Devam Ediyor', 'Onay Bekliyor', 'Tamamlandı', 'İptal'];
 
-// Personelin ve adminin güncelleyebileceği alanlar (EWO formu - F13-31)
+// Personelin ve adminin güncelleyebileceği alanlar (EWO formu - F13-31 + temel kayıt bilgileri)
 const GUNCELLENEBILIR_ALANLAR = [
   'aksiyon', 'hedef_tarih', 'tamamlanma_durumu', 'kok_neden_turu',
   'ariza_turu', 'arizanin_tanimi', 'direk_sebep_cozum',
@@ -14,6 +14,8 @@ const GUNCELLENEBILIR_ALANLAR = [
   'direk_sebep', 'neden_1', 'neden_2', 'neden_3', 'neden_4', 'neden_5',
   'onlemler_kok_neden', 'onlemler_sifir_ariza',
   'analiz_sorumlusu', 'sonuc',
+  // Temel kayıt bilgileri (admin düzeltme için)
+  'tezgah', 'kategori', 'durus_adi', 'kalip_kodu', 'vardiya', 'aciklama',
 ];
 
 export async function PATCH(req: NextRequest) {

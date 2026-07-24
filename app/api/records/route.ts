@@ -33,3 +33,23 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ kayitlar: data });
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = readSession();
+  if (!session || session.rol !== 'admin') {
+    return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  }
+
+  const { ids } = await req.json();
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return NextResponse.json({ error: 'ids gerekli' }, { status: 400 });
+  }
+
+  const supabase = supabaseAdmin();
+  // aksiyonlar tablosu ariza_kayit_id üzerinden "on delete cascade" olduğu için
+  // bağlı aksiyonlar da otomatik silinir.
+  const { error } = await supabase.from('ariza_kayitlari').delete().in('id', ids);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true, silinen: ids.length });
+}

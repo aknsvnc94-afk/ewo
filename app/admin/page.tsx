@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { parseExcelBuffer } from '@/lib/excelParse';
 
 const EWO_ESIK_SANIYE = 20 * 60;
+const KATEGORILER = ['MA', 'BA', 'KA', 'RA'];
 
 type Kayit = {
   id: string;
@@ -11,6 +12,8 @@ type Kayit = {
   kategori: 'MA' | 'BA' | 'KA' | 'RA';
   durus_adi: string;
   aciklama: string;
+  kalip_kodu: string | null;
+  vardiya: number | null;
   baslangic: string;
   sure: string;
   sure_sn: number;
@@ -28,9 +31,13 @@ export default function AdminPage() {
   const [secililer, setSecililer] = useState<Set<string>>(new Set());
   const [atanacakPersonel, setAtanacakPersonel] = useState('');
   const [kategoriFiltre, setKategoriFiltre] = useState('');
+  const [durumFiltre, setDurumFiltre] = useState('');
   const [siralama, setSiralama] = useState<SiralamaAnahtari>('tarih_azalan');
   const [yukleniyor, setYukleniyor] = useState(false);
   const [mesaj, setMesaj] = useState('');
+
+  const [duzenlenenId, setDuzenlenenId] = useState<string | null>(null);
+  const [duzenleForm, setDuzenleForm] = useState<any>({});
 
   async function verileriGetir() {
     const url = kategoriFiltre ? `/api/records?kategori=${kategoriFiltre}` : '/api/records';
@@ -107,17 +114,67 @@ export default function AdminPage() {
     }
   }
 
+  async function kayitSil(idler: string[]) {
+    if (idler.length === 0) return;
+    const onayMesaji = idler.length === 1
+      ? 'Bu kaydı kalıcı olarak silmek istediğinize emin misiniz?'
+      : `${idler.length} kaydı kalıcı olarak silmek istediğinize emin misiniz?`;
+    if (!confirm(onayMesaji)) return;
+
+    const res = await fetch('/api/records', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: idler }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setMesaj(`Hata: ${data.error}`); return; }
+    setMesaj(`✓ ${data.silinen} kayıt silindi`);
+    setSecililer(new Set());
+    verileriGetir();
+  }
+
+  function duzenlemeyeBasla(k: Kayit) {
+    setDuzenlenenId(k.id);
+    setDuzenleForm({
+      tezgah: k.tezgah || '', kategori: k.kategori, durus_adi: k.durus_adi || '',
+      kalip_kodu: k.kalip_kodu || '', vardiya: k.vardiya ?? '', aciklama: k.aciklama || '',
+    });
+  }
+
+  async function duzenlemeyiKaydet(id: string) {
+    const res = await fetch('/api/update-record', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        tezgah: duzenleForm.tezgah,
+        kategori: duzenleForm.kategori,
+        durus_adi: duzenleForm.durus_adi,
+        kalip_kodu: duzenleForm.kalip_kodu || null,
+        vardiya: duzenleForm.vardiya === '' ? null : Number(duzenleForm.vardiya),
+        aciklama: duzenleForm.aciklama,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setMesaj(`Hata: ${data.error}`); return; }
+    setDuzenlenenId(null);
+    verileriGetir();
+  }
+
   const siraliKayitlar = useMemo(() => {
-    const kopya = [...kayitlar];
+    let liste = [...kayitlar];
+    if (durumFiltre) liste = liste.filter((k) => k.tamamlanma_durumu === durumFiltre);
     switch (siralama) {
-      case 'tarih_artan': return kopya.sort((a, b) => new Date(a.baslangic).getTime() - new Date(b.baslangic).getTime());
-      case 'tarih_azalan': return kopya.sort((a, b) => new Date(b.baslangic).getTime() - new Date(a.baslangic).getTime());
-      case 'sure_artan': return kopya.sort((a, b) => (a.sure_sn || 0) - (b.sure_sn || 0));
-      case 'sure_azalan': return kopya.sort((a, b) => (b.sure_sn || 0) - (a.sure_sn || 0));
-      case 'tezgah_az': return kopya.sort((a, b) => (a.tezgah || '').localeCompare(b.tezgah || ''));
-      default: return kopya;
+      case 'tarih_artan': return liste.sort((a, b) => new Date(a.baslangic).getTime() - new Date(b.baslangic).getTime());
+      case 'tarih_azalan': return liste.sort((a, b) => new Date(b.baslangic).getTime() - new Date(a.baslangic).getTime());
+      case 'sure_artan': return liste.sort((a, b) => (a.sure_sn || 0) - (b.sure_sn || 0));
+      case 'sure_azalan': return liste.sort((a, b) => (b.sure_sn || 0) - (a.sure_sn || 0));
+      case 'tezgah_az': return liste.sort((a, b) => (a.tezgah || '').localeCompare(b.tezgah || ''));
+      default: return liste;
     }
-  }, [kayitlar, siralama]);
+  }, [kayitlar, siralama, durumFiltre]);
+
+  const onayBekleyenSayisi = useMemo(() => kayitlar.filter((k) => k.tamamlanma_durumu === 'Onay Bekliyor').length, [kayitlar]);
 
   // Personel bazlı atanan iş sayısı (basit grafik için)
   const personelGrafik = useMemo(() => {
@@ -149,6 +206,12 @@ export default function AdminPage() {
         {mesaj && <p style={{ marginTop: 10 }}>{mesaj}</p>}
       </div>
 
+      {onayBekleyenSayisi > 0 && (
+        <div className="card" style={{ borderColor: 'var(--warn)', cursor: 'pointer' }} onClick={() => setDurumFiltre('Onay Bekliyor')}>
+          <strong className="status-Devam">⚠ {onayBekleyenSayisi} kayıt onay bekliyor.</strong> Kontrol etmek için tıklayın (liste filtrelenecek).
+        </div>
+      )}
+
       <div className="card">
         <h3>Personel Bazlı Atanan İş Sayısı</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -176,6 +239,14 @@ export default function AdminPage() {
               <option value="KA">KA - Kalıp Arızası</option>
               <option value="RA">RA - Robot Arızası</option>
             </select>
+            <select value={durumFiltre} onChange={(e) => setDurumFiltre(e.target.value)}>
+              <option value="">Tüm Durumlar</option>
+              <option value="Beklemede">Beklemede</option>
+              <option value="Devam Ediyor">Devam Ediyor</option>
+              <option value="Onay Bekliyor">Onay Bekliyor</option>
+              <option value="Tamamlandı">Tamamlandı</option>
+              <option value="İptal">İptal</option>
+            </select>
             <select value={siralama} onChange={(e) => setSiralama(e.target.value as SiralamaAnahtari)}>
               <option value="tarih_azalan">Tarih (Yeni → Eski)</option>
               <option value="tarih_artan">Tarih (Eski → Yeni)</option>
@@ -196,32 +267,61 @@ export default function AdminPage() {
           <button onClick={ataYap} disabled={!atanacakPersonel || secililer.size === 0}>
             Seçilenleri Ata ({secililer.size})
           </button>
+          <button className="danger" onClick={() => kayitSil(Array.from(secililer))} disabled={secililer.size === 0}>
+            Seçilenleri Sil ({secililer.size})
+          </button>
         </div>
 
         <table>
           <thead>
             <tr>
-              <th></th><th>Tezgah</th><th>Kategori</th><th>Duruş</th><th>Açıklama</th><th>Başlangıç</th><th>Süre</th><th>Durum</th><th>Atanan</th><th></th>
+              <th></th><th>Tezgah</th><th>Kategori</th><th>Kalıp Kodu</th><th>Duruş</th><th>Açıklama</th><th>Başlangıç</th><th>Süre</th><th>Durum</th><th>Atanan</th><th></th>
             </tr>
           </thead>
           <tbody>
             {siraliKayitlar.map((k) => {
-              const ewoGerekli = (k.sure_sn || 0) > EWO_ESIK_SANIYE;
+              const ewoGerekli = (k.sure_sn || 0) > EWO_ESIK_SANIYE || ['Onay Bekliyor', 'Tamamlandı'].includes(k.tamamlanma_durumu);
+              const duzenleniyor = duzenlenenId === k.id;
+
+              if (duzenleniyor) {
+                return (
+                  <tr key={k.id}>
+                    <td colSpan={10}>
+                      <div className="row" style={{ flexWrap: 'wrap', padding: '8px 0' }}>
+                        <input placeholder="Tezgah" value={duzenleForm.tezgah} onChange={(e) => setDuzenleForm({ ...duzenleForm, tezgah: e.target.value })} style={{ width: 110 }} />
+                        <select value={duzenleForm.kategori} onChange={(e) => setDuzenleForm({ ...duzenleForm, kategori: e.target.value })}>
+                          {KATEGORILER.map((k2) => <option key={k2} value={k2}>{k2}</option>)}
+                        </select>
+                        <input placeholder="Duruş Adı" value={duzenleForm.durus_adi} onChange={(e) => setDuzenleForm({ ...duzenleForm, durus_adi: e.target.value })} style={{ width: 160 }} />
+                        <input placeholder="Kalıp Kodu" value={duzenleForm.kalip_kodu} onChange={(e) => setDuzenleForm({ ...duzenleForm, kalip_kodu: e.target.value })} style={{ width: 110 }} />
+                        <input placeholder="Vardiya" value={duzenleForm.vardiya} onChange={(e) => setDuzenleForm({ ...duzenleForm, vardiya: e.target.value })} style={{ width: 70 }} />
+                        <input placeholder="Açıklama" value={duzenleForm.aciklama} onChange={(e) => setDuzenleForm({ ...duzenleForm, aciklama: e.target.value })} style={{ flex: 1, minWidth: 160 }} />
+                        <button onClick={() => duzenlemeyiKaydet(k.id)}>Kaydet</button>
+                        <button className="secondary" onClick={() => setDuzenlenenId(null)}>Vazgeç</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }
+
               return (
                 <tr key={k.id}>
                   <td><input type="checkbox" checked={secililer.has(k.id)} onChange={() => toggleSecim(k.id)} /></td>
                   <td>{k.tezgah}</td>
                   <td><span className={`badge badge-${k.kategori}`}>{k.kategori}</span></td>
+                  <td>{k.kategori === 'KA' ? (k.kalip_kodu || <span className="muted">-</span>) : ''}</td>
                   <td>{k.durus_adi}</td>
-                  <td className="muted" style={{ maxWidth: 260 }}>{k.aciklama}</td>
+                  <td className="muted" style={{ maxWidth: 220 }}>{k.aciklama}</td>
                   <td>{k.baslangic ? new Date(k.baslangic).toLocaleString('tr-TR') : '-'}</td>
                   <td>{k.sure}</td>
                   <td className={`status-${k.tamamlanma_durumu?.replace(' ', '')}`}>{k.tamamlanma_durumu}</td>
                   <td>{k.personel?.ad_soyad || <span className="muted">Atanmadı</span>}</td>
                   <td>
-                    {ewoGerekli
-                      ? <Link href={`/admin/kayit/${k.id}`}><button className="secondary">İncele</button></Link>
-                      : <span className="muted" style={{ fontSize: 12 }}>EWO gerekmiyor (&lt;20dk)</span>}
+                    <div className="row" style={{ flexWrap: 'nowrap' }}>
+                      {ewoGerekli && <Link href={`/admin/kayit/${k.id}`}><button className="secondary">İncele</button></Link>}
+                      <button className="secondary" onClick={() => duzenlemeyeBasla(k)}>Düzenle</button>
+                      <button className="danger" onClick={() => kayitSil([k.id])}>Sil</button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -231,7 +331,28 @@ export default function AdminPage() {
 
         <div className="record-list mobile-only">
           {siraliKayitlar.map((k) => {
-            const ewoGerekli = (k.sure_sn || 0) > EWO_ESIK_SANIYE;
+            const ewoGerekli = (k.sure_sn || 0) > EWO_ESIK_SANIYE || ['Onay Bekliyor', 'Tamamlandı'].includes(k.tamamlanma_durumu);
+            const duzenleniyor = duzenlenenId === k.id;
+
+            if (duzenleniyor) {
+              return (
+                <div key={k.id} className="record-item" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <input placeholder="Tezgah" value={duzenleForm.tezgah} onChange={(e) => setDuzenleForm({ ...duzenleForm, tezgah: e.target.value })} />
+                  <select value={duzenleForm.kategori} onChange={(e) => setDuzenleForm({ ...duzenleForm, kategori: e.target.value })}>
+                    {KATEGORILER.map((k2) => <option key={k2} value={k2}>{k2}</option>)}
+                  </select>
+                  <input placeholder="Duruş Adı" value={duzenleForm.durus_adi} onChange={(e) => setDuzenleForm({ ...duzenleForm, durus_adi: e.target.value })} />
+                  <input placeholder="Kalıp Kodu" value={duzenleForm.kalip_kodu} onChange={(e) => setDuzenleForm({ ...duzenleForm, kalip_kodu: e.target.value })} />
+                  <input placeholder="Vardiya" value={duzenleForm.vardiya} onChange={(e) => setDuzenleForm({ ...duzenleForm, vardiya: e.target.value })} />
+                  <input placeholder="Açıklama" value={duzenleForm.aciklama} onChange={(e) => setDuzenleForm({ ...duzenleForm, aciklama: e.target.value })} />
+                  <div className="row">
+                    <button onClick={() => duzenlemeyiKaydet(k.id)}>Kaydet</button>
+                    <button className="secondary" onClick={() => setDuzenlenenId(null)}>Vazgeç</button>
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <div key={k.id} className="record-item">
                 <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -242,13 +363,16 @@ export default function AdminPage() {
                   <span className={`badge badge-${k.kategori}`}>{k.kategori}</span>
                 </div>
                 <div className="muted">{k.durus_adi}</div>
+                {k.kategori === 'KA' && k.kalip_kodu && <div className="muted">Kalıp Kodu: {k.kalip_kodu}</div>}
                 {k.aciklama && <div style={{ marginTop: 4 }}>{k.aciklama}</div>}
                 <div className="muted">{k.baslangic ? new Date(k.baslangic).toLocaleString('tr-TR') : '-'} · {k.sure}</div>
                 <div className={`status-${k.tamamlanma_durumu?.replace(' ', '')}`}>{k.tamamlanma_durumu}</div>
                 <div className="muted">{k.personel?.ad_soyad || 'Atanmadı'}</div>
-                {ewoGerekli
-                  ? <Link href={`/admin/kayit/${k.id}`}><button className="secondary" style={{ marginTop: 8 }}>İncele</button></Link>
-                  : <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>EWO gerekmiyor (&lt;20dk)</div>}
+                <div className="row" style={{ marginTop: 8 }}>
+                  {ewoGerekli && <Link href={`/admin/kayit/${k.id}`}><button className="secondary">İncele</button></Link>}
+                  <button className="secondary" onClick={() => duzenlemeyeBasla(k)}>Düzenle</button>
+                  <button className="danger" onClick={() => kayitSil([k.id])}>Sil</button>
+                </div>
               </div>
             );
           })}
