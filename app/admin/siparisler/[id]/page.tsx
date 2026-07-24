@@ -40,6 +40,14 @@ export default function SiparisDetayPage() {
 
   useEffect(() => { getir(); }, [id]);
 
+  async function onayDegistir(alan: 'departman_onayi' | 'satinalma_onayi' | 'talep_onayi', deger: boolean) {
+    await fetch(`/api/siparis/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [alan]: deger }),
+    });
+    getir();
+  }
+
   if (!siparis) return <div className="container"><p className="muted">Yükleniyor...</p></div>;
 
   const alinan = kalemler.filter((k) => k.alindi).length;
@@ -57,6 +65,33 @@ export default function SiparisDetayPage() {
         Yüklenme: {new Date(siparis.yuklenme_tarihi).toLocaleString('tr-TR')} · Yükleyen: {siparis.yukleyen?.ad_soyad || '-'}
         {siparis.pdf_url && <> · <a href={siparis.pdf_url} target="_blank" rel="noopener noreferrer">Orijinal PDF</a></>}
       </p>
+
+      <div className="card">
+        <h3>Onay Adımları</h3>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          {([
+            ['departman_onayi', 'departman_onay_tarihi', 'Departman Sorumlusu Onayı'],
+            ['satinalma_onayi', 'satinalma_onay_tarihi', 'Satın Alma Sorumlusu Onayı'],
+            ['talep_onayi', 'talep_onay_tarihi', 'Talep Onayı'],
+          ] as const).map(([alan, tarihAlani, etiket]) => (
+            <div key={alan} className="card" style={{ flex: 1, minWidth: 200, margin: 0 }}>
+              <div className={siparis[alan] ? 'status-Tamamlandı' : 'status-Beklemede'} style={{ fontWeight: 700, marginBottom: 6 }}>
+                {siparis[alan] ? '✓ Onaylandı' : 'Bekliyor'}
+              </div>
+              <div className="muted" style={{ marginBottom: 8 }}>{etiket}</div>
+              {siparis[alan] && siparis[tarihAlani] && (
+                <div className="muted" style={{ marginBottom: 8, fontSize: 12 }}>{new Date(siparis[tarihAlani]).toLocaleString('tr-TR')}</div>
+              )}
+              <button
+                className={siparis[alan] ? 'secondary' : ''}
+                onClick={() => onayDegistir(alan, !siparis[alan])}
+              >
+                {siparis[alan] ? 'Onayı Kaldır' : 'Onayla'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="card">
         <h3>Kalemler ({alinan}/{kalemler.length} alındı)</h3>

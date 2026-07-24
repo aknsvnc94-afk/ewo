@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { readSession } from '@/lib/session';
 
@@ -9,7 +9,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const supabase = supabaseAdmin();
   const { data: siparis, error: siparisErr } = await supabase
     .from('siparisler')
-    .select('id, dosya_adi, pdf_url, ham_metin, talep_no, tarih, bolum, kisi, yuklenme_tarihi, yukleyen:yukleyen_id ( ad_soyad )')
+    .select('id, dosya_adi, pdf_url, ham_metin, talep_no, tarih, bolum, kisi, yuklenme_tarihi, yukleyen:yukleyen_id ( ad_soyad ), departman_onayi, departman_onay_tarihi, satinalma_onayi, satinalma_onay_tarihi, talep_onayi, talep_onay_tarihi')
     .eq('id', params.id)
     .single();
 
@@ -24,4 +24,33 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   if (kalemErr) return NextResponse.json({ error: kalemErr.message }, { status: 500 });
 
   return NextResponse.json({ siparis, kalemler });
+}
+
+const ONAY_ALANLARI = ['departman_onayi', 'satinalma_onayi', 'talep_onayi'] as const;
+
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const session = readSession();
+  if (!session || session.rol !== 'admin') {
+    return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const supabase = supabaseAdmin();
+  const updatePayload: Record<string, any> = {};
+
+  for (const alan of ONAY_ALANLARI) {
+    if (typeof body[alan] === 'boolean') {
+      updatePayload[alan] = body[alan];
+      updatePayload[`${alan.replace('_onayi', '_onay_tarihi')}`] = body[alan] ? new Date().toISOString() : null;
+    }
+  }
+
+  if (Object.keys(updatePayload).length === 0) {
+    return NextResponse.json({ error: 'Güncellenecek alan bulunamadı' }, { status: 400 });
+  }
+
+  const { error } = await supabase.from('siparisler').update(updatePayload).eq('id', params.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
 }

@@ -74,19 +74,33 @@ export default function AdminPage() {
         return;
       }
 
-      setMesaj(`${kayitlar.length} kayıt bulundu, sunucuya gönderiliyor...`);
-      const res = await fetch('/api/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kayitlar, toplamSatir }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMesaj(`Hata: ${data.error}`);
-      } else {
-        setMesaj(`✓ ${data.eklenen} yeni kayıt eklendi (${data.atlanan_mukerrer} mükerrer atlandı)`);
-        verileriGetir();
+      // Sunucu zaman aşımına takılmamak için (Vercel fonksiyon süre sınırı)
+      // büyük veri setleri parça parça (300'er kayıt) gönderiliyor.
+      const PARCA_BOYUTU = 300;
+      let toplamEklenen = 0;
+      let toplamMukerrer = 0;
+      for (let i = 0; i < kayitlar.length; i += PARCA_BOYUTU) {
+        const parca = kayitlar.slice(i, i + PARCA_BOYUTU);
+        const parcaNo = Math.floor(i / PARCA_BOYUTU) + 1;
+        const toplamParca = Math.ceil(kayitlar.length / PARCA_BOYUTU);
+        setMesaj(`Gönderiliyor: parça ${parcaNo}/${toplamParca} (${i + parca.length}/${kayitlar.length} kayıt)...`);
+
+        const res = await fetch('/api/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kayitlar: parca, toplamSatir }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setMesaj(`Hata (parça ${parcaNo}): ${data.error}`);
+          return;
+        }
+        toplamEklenen += data.eklenen || 0;
+        toplamMukerrer += data.atlanan_mukerrer || 0;
       }
+
+      setMesaj(`✓ ${toplamEklenen} yeni kayıt eklendi (${toplamMukerrer} mükerrer atlandı)`);
+      verileriGetir();
     } catch (err: any) {
       setMesaj(`Hata: Dosya okunamadı (${err?.message || 'bilinmeyen hata'})`);
     } finally {

@@ -7,6 +7,7 @@ type Siparis = {
   talep_no: string | null; tarih: string | null; bolum: string | null; kisi: string | null;
   yukleyen: { ad_soyad: string } | null;
   toplam_kalem: number; alinan_kalem: number;
+  departman_onayi: boolean; satinalma_onayi: boolean; talep_onayi: boolean;
 };
 
 export default function SiparislerPage() {
@@ -73,6 +74,17 @@ export default function SiparislerPage() {
                 <div className="muted">
                   {s.tarih ? `Talep Tarihi: ${s.tarih} · ` : ''}
                   Yüklenme: {new Date(s.yuklenme_tarihi).toLocaleString('tr-TR')} · Yükleyen: {s.yukleyen?.ad_soyad || '-'}
+                </div>
+                <div className="row" style={{ marginTop: 6, fontSize: 12 }}>
+                  <span className={s.departman_onayi ? 'status-Tamamlandı' : 'status-Beklemede'}>
+                    {s.departman_onayi ? '✓' : '○'} Departman
+                  </span>
+                  <span className={s.satinalma_onayi ? 'status-Tamamlandı' : 'status-Beklemede'}>
+                    {s.satinalma_onayi ? '✓' : '○'} Satın Alma
+                  </span>
+                  <span className={s.talep_onayi ? 'status-Tamamlandı' : 'status-Beklemede'}>
+                    {s.talep_onayi ? '✓' : '○'} Talep Onayı
+                  </span>
                 </div>
               </div>
             </Link>

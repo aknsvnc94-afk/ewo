@@ -9,7 +9,7 @@ export async function GET() {
   const supabase = supabaseAdmin();
   const { data: siparisler, error } = await supabase
     .from('siparisler')
-    .select('id, dosya_adi, pdf_url, talep_no, tarih, bolum, kisi, yuklenme_tarihi, yukleyen:yukleyen_id ( ad_soyad )')
+    .select('id, dosya_adi, pdf_url, talep_no, tarih, bolum, kisi, yuklenme_tarihi, yukleyen:yukleyen_id ( ad_soyad ), departman_onayi, satinalma_onayi, talep_onayi')
     .order('yuklenme_tarihi', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

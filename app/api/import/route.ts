@@ -3,6 +3,10 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { readSession } from '@/lib/session';
 import crypto from 'crypto';
 
+// Vercel Pro/Enterprise planlarında fonksiyon süresini uzatır (Hobby planda 10sn sabit kalır,
+// bu ayar zararsızdır). Büyük dosyalar zaten client tarafında parçalara bölünerek gönderiliyor.
+export const maxDuration = 60;
+
 function makeUniqueKey(row: Record<string, any>): string {
   // Aynı arıza kaydı ERP'den tekrar geldiğinde üzerine yazmamak için
   // tezgah + başlangıç + duruş kodu + iş emri detay kodu birleşimi kullanılır.
