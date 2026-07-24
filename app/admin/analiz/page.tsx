@@ -13,7 +13,7 @@ const BOLUMLER: { kod: 'MA' | 'KA' | 'BA' | 'RA'; baslik: string; grupAlan: 'tez
 
 type Kayit = {
   id: string; tezgah: string; kalip_kodu: string | null; kategori: string;
-  sure_sn: number; tamamlanma_durumu: string;
+  sure_sn: number; tamamlanma_durumu: string; kok_neden_turu: string | null;
 };
 
 export default function EwoAnalizPage() {
@@ -51,7 +51,17 @@ export default function EwoAnalizPage() {
     const kapali = buBolumKayitlari.filter((k) => k.tamamlanma_durumu === 'Tamamlandı').length;
     const acik = toplam - kapali;
 
-    return { toplam, paretoSatirlari, acik, kapali };
+    // Kök neden dağılımı
+    const kokNedenSayac: Record<string, number> = {};
+    buBolumKayitlari.forEach((k) => {
+      const neden = k.kok_neden_turu || 'Belirtilmemiş';
+      kokNedenSayac[neden] = (kokNedenSayac[neden] || 0) + 1;
+    });
+    const kokNedenSatirlari = Object.entries(kokNedenSayac)
+      .sort((a, b) => b[1] - a[1])
+      .map(([neden, adet]) => ({ neden, adet, yuzde: toplam ? (adet / toplam) * 100 : 0 }));
+
+    return { toplam, paretoSatirlari, acik, kapali, kokNedenSatirlari };
   }, [kayitlar, aktifBolum, bolum.grupAlan]);
 
   return (
@@ -103,6 +113,24 @@ export default function EwoAnalizPage() {
                   </div>
                   <div style={{ background: 'var(--panel-2)', borderRadius: 6, overflow: 'hidden', height: 16 }}>
                     <div style={{ width: `${s.yuzde}%`, background: 'var(--accent)', height: '100%' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <h3>{bolum.baslik} — Kök Neden Dağılımı</h3>
+            {veri.kokNedenSatirlari.length === 0 && <p className="muted">Bu kategoride 20 dakika üzeri arıza kaydı yok.</p>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {veri.kokNedenSatirlari.map((s) => (
+                <div key={s.neden}>
+                  <div className="row" style={{ justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                    <span>{s.neden}</span>
+                    <span className="muted">{s.adet} adet (%{s.yuzde.toFixed(0)})</span>
+                  </div>
+                  <div style={{ background: 'var(--panel-2)', borderRadius: 6, overflow: 'hidden', height: 16 }}>
+                    <div style={{ width: `${s.yuzde}%`, background: 'var(--ka)', height: '100%' }} />
                   </div>
                 </div>
               ))}

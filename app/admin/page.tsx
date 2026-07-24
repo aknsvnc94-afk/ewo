@@ -8,6 +8,8 @@ const KATEGORILER = ['MA', 'BA', 'KA', 'RA'];
 
 type Kayit = {
   id: string;
+  sira_no: string | null;
+  is_emri_detay_kodu: string | null;
   tezgah: string;
   kategori: 'MA' | 'BA' | 'KA' | 'RA';
   durus_adi: string;
@@ -193,6 +195,8 @@ export default function AdminPage() {
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1>Admin Paneli</h1>
         <div className="row">
+          <Link href="/admin/yeni-kayit"><button className="secondary">+ Yeni Kayıt</button></Link>
+          <Link href="/admin/siparisler"><button className="secondary">Sipariş Takip</button></Link>
           <Link href="/admin/aksiyonlar"><button className="secondary">Aksiyon Takip</button></Link>
           <Link href="/admin/analiz"><button className="secondary">EWO Analiz / Pareto</button></Link>
           <Link href="/admin/personel"><button className="secondary">Personel Yönetimi</button></Link>
@@ -275,7 +279,7 @@ export default function AdminPage() {
         <table>
           <thead>
             <tr>
-              <th></th><th>Tezgah</th><th>Kategori</th><th>Kalıp Kodu</th><th>Duruş</th><th>Açıklama</th><th>Başlangıç</th><th>Süre</th><th>Durum</th><th>Atanan</th><th></th>
+              <th></th><th>Sıra No</th><th>ERP No</th><th>Tezgah</th><th>Kategori</th><th>Kalıp Kodu</th><th>Duruş</th><th>Açıklama</th><th>Başlangıç</th><th>Süre</th><th>Durum</th><th>Atanan</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -286,7 +290,7 @@ export default function AdminPage() {
               if (duzenleniyor) {
                 return (
                   <tr key={k.id}>
-                    <td colSpan={10}>
+                    <td colSpan={13}>
                       <div className="row" style={{ flexWrap: 'wrap', padding: '8px 0' }}>
                         <input placeholder="Tezgah" value={duzenleForm.tezgah} onChange={(e) => setDuzenleForm({ ...duzenleForm, tezgah: e.target.value })} style={{ width: 110 }} />
                         <select value={duzenleForm.kategori} onChange={(e) => setDuzenleForm({ ...duzenleForm, kategori: e.target.value })}>
@@ -307,6 +311,8 @@ export default function AdminPage() {
               return (
                 <tr key={k.id}>
                   <td><input type="checkbox" checked={secililer.has(k.id)} onChange={() => toggleSecim(k.id)} /></td>
+                  <td className="muted">{k.sira_no || '-'}</td>
+                  <td className="muted">{k.is_emri_detay_kodu || '-'}</td>
                   <td>{k.tezgah}</td>
                   <td><span className={`badge badge-${k.kategori}`}>{k.kategori}</span></td>
                   <td>{k.kategori === 'KA' ? (k.kalip_kodu || <span className="muted">-</span>) : ''}</td>
@@ -362,6 +368,7 @@ export default function AdminPage() {
                   </label>
                   <span className={`badge badge-${k.kategori}`}>{k.kategori}</span>
                 </div>
+                <div className="muted">Sıra No: {k.sira_no || '-'} · ERP No: {k.is_emri_detay_kodu || '-'}</div>
                 <div className="muted">{k.durus_adi}</div>
                 {k.kategori === 'KA' && k.kalip_kodu && <div className="muted">Kalıp Kodu: {k.kalip_kodu}</div>}
                 {k.aciklama && <div style={{ marginTop: 4 }}>{k.aciklama}</div>}

@@ -21,6 +21,7 @@ uygulama gibi çalışır (PWA).
    - `supabase/schema_v2_ewo_form.sql`
    - `supabase/schema_v3_guncelleme.sql`
    - `supabase/schema_v4_aksiyonlar.sql`
+   - `supabase/schema_v5_siparis_ve_sira_no.sql`
 3. Kendi admin kullanıcını ekle (PIN'i kendi belirlediğinle değiştir):
    ```sql
    insert into personel (ad_soyad, kullanici_adi, pin_hash, rol)
@@ -32,6 +33,11 @@ uygulama gibi çalışır (PWA).
    - Sol menüden **Storage** → **New bucket**
    - İsim: `cozum-resimleri`
    - **Public bucket** seçeneğini AÇIK bırak (fotoğrafların görüntülenebilmesi için gerekli)
+   - Create
+6. **İkinci Storage bucket'ı oluştur (sipariş PDF'leri için):**
+   - Storage → New bucket
+   - İsim: `siparis-pdfler`
+   - **Public bucket** seçeneğini AÇIK bırak
    - Create
 
 ### 2) Ortam değişkenleri
@@ -87,7 +93,23 @@ Artık uygulama gibi ikonla açılır.
    gösterilir; üstte toplam/açık/onay bekleyen/kapatılan/gecikmiş sayıları görünür.
 9. **EWO Analiz / Pareto (`/admin/analiz`):** MA / KA / BA / RA olmak üzere 4 ayrı bölüm.
    Her bölümde sadece 20dk üzeri (EWO gerektiren) arızalar dahil edilir: MA/BA/RA için **tezgah**
-   bazında, KA için **kalıp kodu** bazında Pareto grafiği + açık/kapalı EWO sayıları gösterilir.
+   bazında, KA için **kalıp kodu** bazında Pareto grafiği + açık/kapalı EWO sayıları + **kök neden
+   dağılımı grafiği** gösterilir.
+10. **Sıra Numarası:** Her arıza kaydına otomatik olarak "2026-1", "2026-2" ... şeklinde artan bir
+    sıra numarası atanır (veritabanı tetikleyicisiyle), ERP'nin kendi iş emri numarası (İş Emri
+    Detay Kodu) da ayrı bir sütunda yanında görünür.
+11. **Manuel Kayıt (`/admin/yeni-kayit`):** ERP'den gelmeyen arızalar/görevler için admin doğrudan
+    kayıt açabilir, personel atayabilir ve aksiyon tanımlayabilir.
+12. **Sipariş Takip (`/admin/siparisler`):** ERP'den açılan "Satınalma Talep Formu" PDF'i yüklenir,
+    sistem Talep No / Tarih / Bölüm / Kişi bilgilerini ve her kalemi (Stok Kodu, Açıklama, Miktar,
+    Teslim Tarihi) otomatik ayrıştırır. Personel `/personel/malzemeler` sayfasından malzemeyi
+    "Alındı" işaretler (tarih/saat otomatik kaydedilir). Teslim tarihi geçmiş ve hâlâ alınmamış
+    kalemler kırmızı gösterilir.
+
+**Not:** PDF ayrıştırma mantığı, gönderdiğiniz örnek "Satınalma Talep Formu" düzenine göre
+kalibre edildi (stok kodu deseni: 2-6 harf + 6-10 rakam, örn. BYP20260763). Farklı bir ERP şablonu
+kullanırsanız, `app/api/siparis/upload/route.ts` içindeki `STOK_KODU_DESENI` ve `DETAY_DESENI`
+regex'lerinin güncellenmesi gerekebilir.
 
 ## Sonraki Aşamalar (yol haritası)
 - [ ] Telegram bot ile yeni atama bildirimi (senin AnKA GLC botunla entegre edilebilir)
