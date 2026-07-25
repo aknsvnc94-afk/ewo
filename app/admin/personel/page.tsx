@@ -15,6 +15,9 @@ export default function PersonelYonetimiPage() {
 
   const [liste, setListe] = useState<Personel[]>([]);
   const [fabrikalar, setFabrikalar] = useState<Fabrika[]>([]);
+  const [yeniFabrikaAdi, setYeniFabrikaAdi] = useState('');
+  const [fabrikaMesaj, setFabrikaMesaj] = useState('');
+  const [fabrikaKaydediliyor, setFabrikaKaydediliyor] = useState(false);
   const [adSoyad, setAdSoyad] = useState('');
   const [kullaniciAdi, setKullaniciAdi] = useState('');
   const [sifre, setSifre] = useState('');
@@ -51,6 +54,30 @@ export default function PersonelYonetimiPage() {
     listeyiGetir();
     fabrikalariGetir();
   }, []);
+
+  async function fabrikaEkle(e: React.FormEvent) {
+    e.preventDefault();
+    setFabrikaMesaj('');
+    if (!yeniFabrikaAdi.trim()) return;
+    setFabrikaKaydediliyor(true);
+    try {
+      const res = await fetch('/api/fabrikalar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ad: yeniFabrikaAdi }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFabrikaMesaj(`Hata: ${data.error}`);
+      } else {
+        setFabrikaMesaj(`✓ ${data.fabrika.ad} eklendi`);
+        setYeniFabrikaAdi('');
+        fabrikalariGetir();
+      }
+    } finally {
+      setFabrikaKaydediliyor(false);
+    }
+  }
 
   async function personelEkle(e: React.FormEvent) {
     e.preventDefault();
@@ -145,6 +172,28 @@ export default function PersonelYonetimiPage() {
         </div>
         {!isSuperadmin && <Link href="/admin"><button className="secondary">← Admin Paneline Dön</button></Link>}
       </div>
+
+      {isSuperadmin && (
+        <div className="card">
+          <h3>Fabrikalar</h3>
+          <form onSubmit={fabrikaEkle} className="row" style={{ maxWidth: 420 }}>
+            <input
+              placeholder="Yeni fabrika adı"
+              value={yeniFabrikaAdi}
+              onChange={(e) => setYeniFabrikaAdi(e.target.value)}
+              style={{ flex: 1 }}
+              required
+            />
+            <button type="submit" disabled={fabrikaKaydediliyor}>
+              {fabrikaKaydediliyor ? 'Ekleniyor...' : 'Fabrika Ekle'}
+            </button>
+          </form>
+          {fabrikaMesaj && <div style={{ fontSize: 14, marginTop: 10 }}>{fabrikaMesaj}</div>}
+          <div className="muted" style={{ marginTop: 12, fontSize: 14 }}>
+            Mevcut fabrikalar: {fabrikalar.length === 0 ? '—' : fabrikalar.map((f) => f.ad).join(', ')}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h3>Yeni Personel Ekle</h3>
