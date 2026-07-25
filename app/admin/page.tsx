@@ -228,6 +228,7 @@ export default function AdminPage() {
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1>Admin Paneli</h1>
         <div className="row">
+          <Link href="/admin/bana-atananlar"><button className="secondary">Bana Atananlar</button></Link>
           <Link href="/admin/yeni-kayit"><button className="secondary">+ Yeni Kayıt</button></Link>
           <Link href="/admin/siparisler"><button className="secondary">Sipariş Takip</button></Link>
           <Link href="/admin/aksiyonlar"><button className="secondary">Aksiyon Takip</button></Link>

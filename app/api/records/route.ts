@@ -21,8 +21,10 @@ export async function GET(req: NextRequest) {
       `)
       .order('baslangic', { ascending: false });
 
-    // Personel sadece kendine atanan kayıtları görür; admin hepsini görür
-    if (session!.rol === 'personel') {
+    // Personel her zaman sadece kendine atananları görür; admin normalde hepsini görür,
+    // ancak ?atanan=me ile admin de (veya personel de) sadece kendine atananları filtreleyebilir.
+    const atananParam = req.nextUrl.searchParams.get('atanan');
+    if (session!.rol === 'personel' || atananParam === 'me') {
       query = query.eq('atanan_personel_id', session!.id);
     }
 

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import ResimYukleyici from '@/components/ResimYukleyici';
 
 const ARIZA_TURLERI = ['PLC', 'Yazılım', 'Mekanik', 'Elektrik', 'Hidrolik', 'Pnömatik'];
@@ -10,6 +10,8 @@ const EWO_ESIK_SANIYE = 20 * 60; // 20 dakika
 export default function PersonelKayitFormu() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
+  const donusYolu = searchParams.get('donus') === 'admin' ? '/admin/bana-atananlar' : '/personel';
   const id = params?.id as string;
 
   const [kayit, setKayit] = useState<any>(null);
@@ -58,7 +60,7 @@ export default function PersonelKayitFormu() {
       });
       const data = await res.json();
       if (!res.ok) { setMesaj(`Hata: ${data.error}`); return; }
-      if (gonder) router.push('/personel');
+      if (gonder) router.push(donusYolu);
       else setMesaj('✓ Taslak kaydedildi');
     } finally {
       setKaydediliyor(false);
@@ -73,7 +75,7 @@ export default function PersonelKayitFormu() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, tamamlanma_durumu: 'Tamamlandı' }),
       });
-      if (res.ok) router.push('/personel');
+      if (res.ok) router.push(donusYolu);
     } finally {
       setKaydediliyor(false);
     }
