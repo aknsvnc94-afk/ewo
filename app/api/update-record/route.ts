@@ -21,6 +21,7 @@ const GUNCELLENEBILIR_ALANLAR = [
 export async function PATCH(req: NextRequest) {
   const session = readSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const body = await req.json();
   const { id } = body;
@@ -32,16 +33,18 @@ export async function PATCH(req: NextRequest) {
 
   const supabase = supabaseAdmin();
 
+  const { data: kayit } = await supabase
+    .from('ariza_kayitlari')
+    .select('atanan_personel_id, fabrika_id')
+    .eq('id', id)
+    .single();
+  if (!kayit || kayit.fabrika_id !== session.fabrikaId) {
+    return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
+  }
+
   // Personel sadece kendine atanan kaydı güncelleyebilir
-  if (session.rol === 'personel') {
-    const { data: kayit } = await supabase
-      .from('ariza_kayitlari')
-      .select('atanan_personel_id')
-      .eq('id', id)
-      .single();
-    if (!kayit || kayit.atanan_personel_id !== session.id) {
-      return NextResponse.json({ error: 'Bu kayıt size atanmamış' }, { status: 403 });
-    }
+  if (session.rol === 'personel' && kayit.atanan_personel_id !== session.id) {
+    return NextResponse.json({ error: 'Bu kayıt size atanmamış' }, { status: 403 });
   }
 
   const updatePayload: Record<string, any> = {};
@@ -53,7 +56,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Güncellenecek alan bulunamadı' }, { status: 400 });
   }
 
-  const { error } = await supabase.from('ariza_kayitlari').update(updatePayload).eq('id', id);
+  const { error } = await supabase.from('ariza_kayitlari').update(updatePayload).eq('id', id).eq('fabrika_id', session.fabrikaId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });

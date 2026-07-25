@@ -5,13 +5,16 @@ import { readSession } from '@/lib/session';
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = readSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const { durum, kapatma_aciklamasi } = await req.json();
   const supabase = supabaseAdmin();
 
   const { data: aksiyon } = await supabase
-    .from('aksiyonlar').select('sorumlu_personel_id').eq('id', params.id).single();
-  if (!aksiyon) return NextResponse.json({ error: 'Aksiyon bulunamadı' }, { status: 404 });
+    .from('aksiyonlar').select('sorumlu_personel_id, fabrika_id').eq('id', params.id).single();
+  if (!aksiyon || aksiyon.fabrika_id !== session.fabrikaId) {
+    return NextResponse.json({ error: 'Aksiyon bulunamadı' }, { status: 404 });
+  }
 
   if (session.rol === 'personel') {
     // Personel sadece kendine ait aksiyonu, sadece "Onay Bekliyor" durumuna geçirebilir (kapatma isteği)

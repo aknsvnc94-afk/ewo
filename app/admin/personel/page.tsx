@@ -2,19 +2,37 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-type Personel = { id: string; ad_soyad: string; kullanici_adi: string; rol: string; aktif: boolean };
+type Personel = {
+  id: string; ad_soyad: string; kullanici_adi: string; rol: string; aktif: boolean;
+  fabrika_id: string | null; fabrika: { ad: string } | null;
+};
+type Fabrika = { id: string; ad: string; kod: string };
 
 export default function PersonelYonetimiPage() {
+  const [benimRol, setBenimRol] = useState<string | null>(null);
+  const [fabrikaAdim, setFabrikaAdim] = useState<string | null>(null);
+  const isSuperadmin = benimRol === 'superadmin';
+
   const [liste, setListe] = useState<Personel[]>([]);
+  const [fabrikalar, setFabrikalar] = useState<Fabrika[]>([]);
   const [adSoyad, setAdSoyad] = useState('');
   const [kullaniciAdi, setKullaniciAdi] = useState('');
   const [sifre, setSifre] = useState('');
   const [rol, setRol] = useState('personel');
+  const [fabrikaId, setFabrikaId] = useState('');
   const [mesaj, setMesaj] = useState('');
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
   const [duzenlenenId, setDuzenlenenId] = useState<string | null>(null);
   const [duzenleForm, setDuzenleForm] = useState<{ ad_soyad: string; kullanici_adi: string; rol: string; yeni_sifre: string }>({ ad_soyad: '', kullanici_adi: '', rol: 'personel', yeni_sifre: '' });
+
+  async function benimBilgim() {
+    const res = await fetch('/api/auth/me');
+    if (!res.ok) return;
+    const data = await res.json();
+    setBenimRol(data.rol);
+    setFabrikaAdim(data.fabrikaAd);
+  }
 
   async function listeyiGetir() {
     const res = await fetch('/api/personel');
@@ -22,24 +40,41 @@ export default function PersonelYonetimiPage() {
     setListe(data.personel || []);
   }
 
-  useEffect(() => { listeyiGetir(); }, []);
+  async function fabrikalariGetir() {
+    const res = await fetch('/api/fabrikalar');
+    const data = await res.json();
+    setFabrikalar(data.fabrikalar || []);
+  }
+
+  useEffect(() => {
+    benimBilgim();
+    listeyiGetir();
+    fabrikalariGetir();
+  }, []);
 
   async function personelEkle(e: React.FormEvent) {
     e.preventDefault();
     setMesaj('');
+    if (isSuperadmin && rol !== 'superadmin' && !fabrikaId) {
+      setMesaj('Hata: Fabrika seçimi gerekli');
+      return;
+    }
     setKaydediliyor(true);
     try {
       const res = await fetch('/api/personel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ad_soyad: adSoyad, kullanici_adi: kullaniciAdi, sifre, rol }),
+        body: JSON.stringify({
+          ad_soyad: adSoyad, kullanici_adi: kullaniciAdi, sifre, rol,
+          fabrika_id: isSuperadmin && rol !== 'superadmin' ? fabrikaId : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
         setMesaj(`Hata: ${data.error}`);
       } else {
         setMesaj(`✓ ${adSoyad} eklendi. Kullanıcı adı: ${kullaniciAdi.toLowerCase()}`);
-        setAdSoyad(''); setKullaniciAdi(''); setSifre(''); setRol('personel');
+        setAdSoyad(''); setKullaniciAdi(''); setSifre(''); setRol('personel'); setFabrikaId('');
         listeyiGetir();
       }
     } finally {
@@ -104,8 +139,11 @@ export default function PersonelYonetimiPage() {
   return (
     <div className="container">
       <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h1>Personel Yönetimi</h1>
-        <Link href="/admin"><button className="secondary">← Admin Paneline Dön</button></Link>
+        <div>
+          <h1>Personel Yönetimi</h1>
+          {fabrikaAdim && <div className="muted">Fabrika: {fabrikaAdim}</div>}
+        </div>
+        {!isSuperadmin && <Link href="/admin"><button className="secondary">← Admin Paneline Dön</button></Link>}
       </div>
 
       <div className="card">
@@ -117,7 +155,14 @@ export default function PersonelYonetimiPage() {
           <select value={rol} onChange={(e) => setRol(e.target.value)}>
             <option value="personel">Personel</option>
             <option value="admin">Admin</option>
+            {isSuperadmin && <option value="superadmin">Süper Admin</option>}
           </select>
+          {isSuperadmin && rol !== 'superadmin' && (
+            <select value={fabrikaId} onChange={(e) => setFabrikaId(e.target.value)} required>
+              <option value="" disabled>Fabrika seçin</option>
+              {fabrikalar.map((f) => <option key={f.id} value={f.id}>{f.ad}</option>)}
+            </select>
+          )}
           <button type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Ekleniyor...' : 'Personel Ekle'}</button>
         </form>
         {mesaj && <div style={{ fontSize: 14, marginTop: 10 }}>{mesaj}</div>}
@@ -140,6 +185,7 @@ export default function PersonelYonetimiPage() {
                     <select value={duzenleForm.rol} onChange={(e) => setDuzenleForm({ ...duzenleForm, rol: e.target.value })} style={{ width: '100%', marginTop: 4 }}>
                       <option value="personel">Personel</option>
                       <option value="admin">Admin</option>
+                      {isSuperadmin && <option value="superadmin">Süper Admin</option>}
                     </select>
                   </label>
                   <label className="muted">Yeni Şifre (değiştirmek istemiyorsan boş bırak)
@@ -154,7 +200,10 @@ export default function PersonelYonetimiPage() {
                 <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
                   <div>
                     <strong>{p.ad_soyad}</strong>
-                    <div className="muted">@{p.kullanici_adi} · {p.rol === 'admin' ? 'Admin' : 'Personel'}</div>
+                    <div className="muted">
+                      @{p.kullanici_adi} · {p.rol === 'superadmin' ? 'Süper Admin' : p.rol === 'admin' ? 'Admin' : 'Personel'}
+                      {isSuperadmin && (p.fabrika ? ` · ${p.fabrika.ad}` : ' · —')}
+                    </div>
                     <div className={p.aktif ? 'status-Tamamlandı' : 'status-İptal'}>{p.aktif ? 'Aktif' : 'Pasif'}</div>
                   </div>
                   <div className="row">

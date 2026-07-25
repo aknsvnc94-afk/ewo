@@ -5,12 +5,15 @@ import { readSession } from '@/lib/session';
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = readSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const supabase = supabaseAdmin();
 
   const { data: isEmri } = await supabase
-    .from('is_emirleri').select('atanan_personel_id').eq('id', params.id).single();
-  if (!isEmri) return NextResponse.json({ error: 'İş emri bulunamadı' }, { status: 404 });
+    .from('is_emirleri').select('atanan_personel_id, fabrika_id').eq('id', params.id).single();
+  if (!isEmri || isEmri.fabrika_id !== session.fabrikaId) {
+    return NextResponse.json({ error: 'İş emri bulunamadı' }, { status: 404 });
+  }
 
   if (session.rol === 'personel' && isEmri.atanan_personel_id !== session.id) {
     return NextResponse.json({ error: 'Bu iş emri size atanmamış' }, { status: 403 });

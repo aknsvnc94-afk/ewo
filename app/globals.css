@@ -79,6 +79,57 @@ button.danger { background: var(--danger); }
 .status-Tamamlandı { color: var(--ok); }
 .status-İptal { color: var(--danger); }
 
+/* Giriş ekranı */
+.login-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  padding: 24px;
+}
+.login-glow {
+  position: absolute;
+  width: 640px;
+  height: 640px;
+  background: radial-gradient(circle, rgba(59,130,246,0.28), transparent 70%);
+  top: -260px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.login-card {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px 28px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.45);
+}
+.login-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent), #1d4ed8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  box-shadow: 0 8px 20px rgba(59,130,246,0.35);
+}
+.login-title { font-size: 21px; margin: 0 0 4px 0; letter-spacing: -0.01em; }
+.login-sub { margin: 0 0 26px 0; font-size: 13.5px; line-height: 1.4; }
+.login-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 22px 0 16px 0;
+}
+.login-superadmin-option { color: var(--muted); font-style: italic; }
+
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 600; }

@@ -1,15 +1,20 @@
-# EWO Arıza Takip Sistemi (Web)
+# Bakım Yönetim Sistemi (Web)
 
-Plaskar bakım ekibi için ERP arıza kayıtlarını yükleme, personele atama ve
-personelin mobil/PC üzerinden detay (aksiyon, kök neden, tamamlanma durumu)
-doldurmasını sağlayan web uygulaması. Telefonda "ana ekrana ekle" ile
+Çoklu fabrika desteğiyle çalışan bakım yönetim platformu: ERP arıza kayıtlarını
+yükleme, personele atama ve personelin mobil/PC üzerinden detay (aksiyon, kök
+neden, tamamlanma durumu) doldurmasını sağlar. Telefonda "ana ekrana ekle" ile
 uygulama gibi çalışır (PWA).
+
+Her fabrikanın verisi (personel, arıza kayıtları, iş emirleri, siparişler,
+aksiyonlar) birbirinden tamamen izole — giriş ekranında kullanıcı önce
+fabrikasını seçer. Ayrıca tüm fabrikalardaki personeli yönetebilen bir
+**Süper Admin** rolü de mevcuttur.
 
 ## Mimari
 - **Frontend:** Next.js 14 (App Router) + PWA
 - **Backend:** Next.js API Routes
 - **Veritabanı:** Supabase (Postgres)
-- **Giriş:** Kullanıcı adı + PIN (imzalı cookie ile 30 gün oturum)
+- **Giriş:** Fabrika seçimi + Kullanıcı adı + PIN (imzalı cookie ile 30 gün oturum)
 - **Barındırma:** Vercel (frontend) + Supabase (veritabanı) — ikisi de ücretsiz planla başlar
 
 ## Kurulum Adımları
@@ -25,10 +30,26 @@ uygulama gibi çalışır (PWA).
    - `supabase/schema_v6_siparis_onay.sql` (opsiyonel, artık kullanılmıyor ama zararsız)
    - `supabase/schema_v7_genel_tesis.sql`
    - `supabase/schema_v8_is_emirleri.sql`
-3. Kendi admin kullanıcını ekle (PIN'i kendi belirlediğinle değiştir):
+   - `supabase/schema_v9_giris_guvenligi.sql`
+   - `supabase/schema_v10_fabrikalar.sql` (çoklu fabrika desteği — mevcut tüm
+     veri geriye dönük olarak "Plaskar" fabrikasına atanır)
+3. İlk fabrikanı (Plaskar zaten `schema_v10` ile otomatik oluşuyor) veya yeni bir
+   fabrika daha eklemek istersen:
    ```sql
-   insert into personel (ad_soyad, kullanici_adi, pin_hash, rol)
-   values ('Akın Sevinç', 'akin', crypt('SENIN_SIFREN', gen_salt('bf')), 'admin');
+   insert into fabrikalar (ad, kod) values ('Yeni Fabrika A.Ş.', 'yeni-fabrika') returning id;
+   ```
+   O fabrikaya admin ekle (PIN'i kendi belirlediğinle değiştir, `fabrika_id`'yi
+   yukarıdaki `insert`'ten dönen id ile değiştir — Plaskar için sabit id
+   `00000000-0000-0000-0000-000000000001`):
+   ```sql
+   insert into personel (ad_soyad, kullanici_adi, pin_hash, rol, fabrika_id)
+   values ('Akın Sevinç', 'akin', crypt('SENIN_SIFREN', gen_salt('bf')), 'admin', '00000000-0000-0000-0000-000000000001');
+   ```
+   Tüm fabrikalardaki personeli tek yerden yönetebilen bir **süper admin**
+   eklemek istersen (`fabrika_id` bilerek `null` bırakılır):
+   ```sql
+   insert into personel (ad_soyad, kullanici_adi, pin_hash, rol, fabrika_id)
+   values ('Akın Sevinç', 'superadmin', crypt('SENIN_SIFREN', gen_salt('bf')), 'superadmin', null);
    ```
    (Diğer personelleri artık `/admin/personel` sayfasından, SQL yazmadan ekleyebilir/düzenleyebilir/silebilirsin.)
 4. Settings > API sayfasından `Project URL` ve `service_role`/`secret` key'i kopyala
@@ -69,6 +90,10 @@ Vercel adresini telefonda tarayıcıda aç → paylaş/menü > "Ana Ekrana Ekle"
 Artık uygulama gibi ikonla açılır.
 
 ## Kullanım Akışı
+0. **Giriş:** Herkes önce fabrikasını seçer, sonra kullanıcı adı + şifre girer.
+   Süper admin hesapları listenin altındaki "Süper Admin" seçeneğiyle, fabrika
+   seçmeden giriş yapar ve doğrudan `/admin/personel`'e (tüm fabrikalardaki
+   personel listesi) yönlendirilir.
 1. **Admin (sen):** `/admin/personel` sayfasından bakım personeline kullanıcı adı + şifre tanımla
    (düzenleme, şifre sıfırlama, pasif yapma ve silme seçenekleri de burada)
 2. **Admin:** ERP'den Excel export al → `/admin` sayfasından yükle (tarayıcıda parse edilir,

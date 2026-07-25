@@ -15,6 +15,7 @@ type Kayit = {
 
 export default function PersonelPage() {
   const [kayitlar, setKayitlar] = useState<Kayit[]>([]);
+  const [fabrikaAdim, setFabrikaAdim] = useState<string | null>(null);
 
   async function verileriGetir() {
     const res = await fetch('/api/records');
@@ -22,7 +23,10 @@ export default function PersonelPage() {
     setKayitlar(data.kayitlar || []);
   }
 
-  useEffect(() => { verileriGetir(); }, []);
+  useEffect(() => {
+    verileriGetir();
+    fetch('/api/auth/me').then((r) => r.json()).then((d) => setFabrikaAdim(d.fabrikaAd || null)).catch(() => {});
+  }, []);
 
   const toplam = kayitlar.length;
   const tamamlanan = kayitlar.filter((k) => k.tamamlanma_durumu === 'Tamamlandı').length;
@@ -32,7 +36,10 @@ export default function PersonelPage() {
   return (
     <div className="container">
       <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h1>Bana Atanan Arızalar</h1>
+        <div>
+          <h1>Bana Atanan Arızalar</h1>
+          {fabrikaAdim && <div className="muted">Fabrika: {fabrikaAdim}</div>}
+        </div>
         <div className="row">
           <Link href="/personel/is-emirleri"><button className="secondary">İş Emirlerim</button></Link>
           <Link href="/personel/malzemeler"><button className="secondary">Gelen Malzemeler</button></Link>

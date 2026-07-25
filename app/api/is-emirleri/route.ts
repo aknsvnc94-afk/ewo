@@ -5,6 +5,7 @@ import { readSession } from '@/lib/session';
 export async function GET(req: NextRequest) {
   const session = readSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const supabase = supabaseAdmin();
   let query = supabase
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest) {
       atanan:atanan_personel_id ( ad_soyad ),
       kapatan:kapatan_personel_id ( ad_soyad )
     `)
+    .eq('fabrika_id', session.fabrikaId)
     .order('tarih', { ascending: false });
 
   if (session.rol === 'personel') {
@@ -34,6 +36,7 @@ export async function POST(req: NextRequest) {
   if (!session || session.rol !== 'admin') {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const { kayitlar } = await req.json();
   if (!Array.isArray(kayitlar) || kayitlar.length === 0) {
@@ -46,6 +49,7 @@ export async function POST(req: NextRequest) {
   const { data: mevcut, error: mevcutErr } = await supabase
     .from('is_emirleri')
     .select('is_emri_no')
+    .eq('fabrika_id', session.fabrikaId)
     .in('is_emri_no', isEmriNolari);
 
   if (mevcutErr) return NextResponse.json({ error: mevcutErr.message }, { status: 500 });
@@ -53,7 +57,7 @@ export async function POST(req: NextRequest) {
   const mevcutSet = new Set((mevcut || []).map((m) => m.is_emri_no));
   const yeniKayitlar = kayitlar
     .filter((k) => k.is_emri_no && !mevcutSet.has(k.is_emri_no))
-    .map((k) => ({ ...k, yukleyen_id: session.id }));
+    .map((k) => ({ ...k, fabrika_id: session.fabrikaId, yukleyen_id: session.id }));
 
   if (yeniKayitlar.length === 0) {
     return NextResponse.json({ eklenen: 0, atlanan_mukerrer: kayitlar.length });
@@ -70,6 +74,7 @@ export async function DELETE(req: NextRequest) {
   if (!session || session.rol !== 'admin') {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const { ids } = await req.json();
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -77,7 +82,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   const supabase = supabaseAdmin();
-  const { error } = await supabase.from('is_emirleri').delete().in('id', ids);
+  const { error } = await supabase.from('is_emirleri').delete().in('id', ids).eq('fabrika_id', session.fabrikaId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true, silinen: ids.length });

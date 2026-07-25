@@ -1,4 +1,11 @@
 /** @type {import('next').NextConfig} */
+// Next.js dev modu (npm run dev) hot-reload için eval() kullanır; production
+// build'de bu gerekmez. CSP'yi sadece dev modunda gevşetiyoruz ki yerel test
+// çalışsın, production'daki güvenlik seviyesi değişmesin.
+const scriptSrc = process.env.NODE_ENV === 'development'
+  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+  : "script-src 'self' 'unsafe-inline'";
+
 const guvenlikBasliklari = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -9,7 +16,7 @@ const guvenlikBasliklari = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      scriptSrc,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "font-src 'self' data:",

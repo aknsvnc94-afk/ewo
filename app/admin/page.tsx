@@ -10,9 +10,11 @@ export default function AdminDashboard() {
   const [kayitlar, setKayitlar] = useState<Kayit[]>([]);
   const [isEmirleri, setIsEmirleri] = useState<IsEmri[]>([]);
   const [kalemler, setKalemler] = useState<SiparisKalemi[]>([]);
+  const [fabrikaAdim, setFabrikaAdim] = useState<string | null>(null);
   const [yukleniyor, setYukleniyor] = useState(true);
 
   useEffect(() => {
+    fetch('/api/auth/me').then((r) => r.json()).then((d) => setFabrikaAdim(d.fabrikaAd || null)).catch(() => {});
     Promise.all([
       fetch('/api/records').then((r) => r.json()),
       fetch('/api/is-emirleri').then((r) => r.json()),
@@ -53,7 +55,10 @@ export default function AdminDashboard() {
   return (
     <div className="container">
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <h1>Admin Paneli</h1>
+        <div>
+          <h1>Admin Paneli</h1>
+          {fabrikaAdim && <div className="muted">Fabrika: {fabrikaAdim}</div>}
+        </div>
         <div className="row" style={{ flexWrap: 'wrap' }}>
           <Link href="/admin/ewo-arizalar"><button>EWO Arıza Kayıtları</button></Link>
           <Link href="/admin/is-emirleri"><button className="secondary">İş Emirleri</button></Link>

@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
   if (!session || session.rol !== 'admin') {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const body = await req.json();
   const kayitlarHam: Record<string, any>[] = body.kayitlar;
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
   const kayitlar: Record<string, any>[] = kayitlarHam.map((obj) => ({
     ...obj,
     unique_key: makeUniqueKey(obj),
+    fabrika_id: session.fabrikaId,
     yukleyen_id: session.id,
   }));
 
@@ -47,6 +49,7 @@ export async function POST(req: NextRequest) {
   const { data: existing, error: existingErr } = await supabase
     .from('ariza_kayitlari')
     .select('unique_key')
+    .eq('fabrika_id', session.fabrikaId)
     .in('unique_key', keys);
 
   if (existingErr) {

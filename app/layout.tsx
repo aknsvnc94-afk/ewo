@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'EWO Arıza Takip - Plaskar',
-  description: 'Bakım arıza kayıtları takip ve atama sistemi',
+  title: 'Bakım Yönetim Sistemi',
+  description: 'Çoklu fabrika bakım arıza, iş emri ve sipariş takip platformu',
   manifest: '/manifest.json',
 };
 

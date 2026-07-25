@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
   if (!session || session.rol !== 'admin') {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const { ariza_kayit_id, tip, onlemler } = await req.json() as {
     ariza_kayit_id: string; tip: 'kok_neden' | 'sifir_ariza'; onlemler: OnlemGirdi[];
@@ -23,6 +24,12 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = supabaseAdmin();
+
+  const { data: kayit } = await supabase
+    .from('ariza_kayitlari').select('fabrika_id').eq('id', ariza_kayit_id).single();
+  if (!kayit || kayit.fabrika_id !== session.fabrikaId) {
+    return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
+  }
 
   // Bu kayıt + tip için hâlâ "Açık" durumda olan (personel henüz dokunmamış)
   // eski aksiyonları temizle, sonra formdaki güncel satırları ekle.
@@ -37,6 +44,7 @@ export async function POST(req: NextRequest) {
   if (gecerliOnlemler.length > 0) {
     const eklenecekler = gecerliOnlemler.map((o) => ({
       ariza_kayit_id,
+      fabrika_id: session.fabrikaId,
       tip,
       sira: o.sira,
       aciklama: o.aciklama.trim(),

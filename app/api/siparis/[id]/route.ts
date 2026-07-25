@@ -5,12 +5,14 @@ import { readSession } from '@/lib/session';
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const session = readSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const supabase = supabaseAdmin();
   const { data: siparis, error: siparisErr } = await supabase
     .from('siparisler')
     .select('id, dosya_adi, pdf_url, ham_metin, talep_no, tarih, bolum, kisi, yuklenme_tarihi, yukleyen:yukleyen_id ( ad_soyad ), departman_onayi, departman_onay_tarihi, satinalma_onayi, satinalma_onay_tarihi, talep_onayi, talep_onay_tarihi')
     .eq('id', params.id)
+    .eq('fabrika_id', session.fabrikaId)
     .single();
 
   if (siparisErr || !siparis) return NextResponse.json({ error: 'Sipariş bulunamadı' }, { status: 404 });
@@ -33,6 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!session || session.rol !== 'admin') {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const body = await req.json();
   const supabase = supabaseAdmin();
@@ -49,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'Güncellenecek alan bulunamadı' }, { status: 400 });
   }
 
-  const { error } = await supabase.from('siparisler').update(updatePayload).eq('id', params.id);
+  const { error } = await supabase.from('siparisler').update(updatePayload).eq('id', params.id).eq('fabrika_id', session.fabrikaId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });

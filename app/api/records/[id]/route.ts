@@ -5,12 +5,14 @@ import { readSession } from '@/lib/session';
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = readSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const supabase = supabaseAdmin();
   const { data, error } = await supabase
     .from('ariza_kayitlari')
     .select(`*, personel:atanan_personel_id ( ad_soyad )`)
     .eq('id', params.id)
+    .eq('fabrika_id', session.fabrikaId)
     .single();
 
   if (error || !data) return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });

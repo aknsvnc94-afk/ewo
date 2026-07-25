@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
   if (!session || session.rol !== 'admin') {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const formData = await req.formData();
   const file = formData.get('file') as File | null;
@@ -114,6 +115,7 @@ export async function POST(req: NextRequest) {
     tarih: baslikBilgisi.tarih,
     bolum: baslikBilgisi.bolum,
     kisi: baslikBilgisi.kisi,
+    fabrika_id: session.fabrikaId,
     yukleyen_id: session.id,
   }).select('id').single();
 
@@ -121,6 +123,7 @@ export async function POST(req: NextRequest) {
 
   const eklenecekKalemler = kalemler.map((k, i) => ({
     siparis_id: siparis.id,
+    fabrika_id: session.fabrikaId,
     sira: i,
     satir_metni: k.satir_metni,
     stok_kodu: k.stok_kodu,

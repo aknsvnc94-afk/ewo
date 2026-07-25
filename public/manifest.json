@@ -1,7 +1,7 @@
 {
-  "name": "EWO Arıza Takip - Plaskar",
-  "short_name": "EWO Takip",
-  "description": "Bakım arıza kayıtları takip ve atama sistemi",
+  "name": "Bakım Yönetim Sistemi",
+  "short_name": "Bakım Sistemi",
+  "description": "Çoklu fabrika bakım arıza, iş emri ve sipariş takip platformu",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b1220",

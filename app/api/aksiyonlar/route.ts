@@ -5,6 +5,7 @@ import { readSession } from '@/lib/session';
 export async function GET(req: NextRequest) {
   const session = readSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const supabase = supabaseAdmin();
   let query = supabase
@@ -14,6 +15,7 @@ export async function GET(req: NextRequest) {
       sorumlu:sorumlu_personel_id ( ad_soyad ),
       kayit:ariza_kayit_id ( tezgah, kategori, durus_adi, baslangic )
     `)
+    .eq('fabrika_id', session.fabrikaId)
     .order('plan_tarihi', { ascending: true, nullsFirst: false });
 
   if (session.rol === 'personel') {
@@ -35,6 +37,7 @@ export async function POST(req: NextRequest) {
   if (!session || session.rol !== 'admin') {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const { ariza_kayit_id, aciklama, sorumlu_personel_id, plan_tarihi } = await req.json();
   if (!ariza_kayit_id || !aciklama) {
@@ -42,8 +45,16 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = supabaseAdmin();
+
+  const { data: kayit } = await supabase
+    .from('ariza_kayitlari').select('fabrika_id').eq('id', ariza_kayit_id).single();
+  if (!kayit || kayit.fabrika_id !== session.fabrikaId) {
+    return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
+  }
+
   const { data, error } = await supabase.from('aksiyonlar').insert({
     ariza_kayit_id, tip: 'manuel', aciklama,
+    fabrika_id: session.fabrikaId,
     sorumlu_personel_id: sorumlu_personel_id || null,
     plan_tarihi: plan_tarihi || null,
     durum: 'Açık',

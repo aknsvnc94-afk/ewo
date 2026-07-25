@@ -3,7 +3,13 @@ import crypto from 'crypto';
 
 const COOKIE_NAME = 'ewo_session';
 
-type SessionData = { id: string; ad_soyad: string; rol: 'admin' | 'personel' };
+type SessionData = {
+  id: string;
+  ad_soyad: string;
+  rol: 'admin' | 'personel' | 'superadmin';
+  fabrikaId: string | null;
+  fabrikaAd: string | null;
+};
 
 function sign(payload: string) {
   const secret = process.env.SESSION_SECRET!;

@@ -8,6 +8,7 @@ export const maxDuration = 30;
 export async function GET(req: NextRequest) {
   const session = readSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const supabase = supabaseAdmin();
 
@@ -19,6 +20,7 @@ export async function GET(req: NextRequest) {
         kategori, aksiyon, hedef_tarih, tamamlanma_durumu, kok_neden_turu,
         atanan_personel_id, personel:atanan_personel_id ( ad_soyad )
       `)
+      .eq('fabrika_id', session!.fabrikaId)
       .order('baslangic', { ascending: false });
 
     // Personel her zaman sadece kendine atananları görür; admin normalde hepsini görür,
@@ -61,6 +63,7 @@ export async function POST(req: NextRequest) {
   if (!session || session.rol !== 'admin') {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const { tezgah, kategori, durus_adi, aciklama, atanan_personel_id, kalip_kodu } = await req.json();
   if (!tezgah || !kategori || !durus_adi) {
@@ -75,6 +78,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase.from('ariza_kayitlari').insert({
     unique_key: `manuel-${crypto.randomUUID()}`,
+    fabrika_id: session.fabrikaId,
     tezgah, kategori, durus_adi,
     aciklama: aciklama || null,
     kalip_kodu: kalip_kodu || null,
@@ -95,6 +99,7 @@ export async function DELETE(req: NextRequest) {
   if (!session || session.rol !== 'admin') {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
 
   const { ids } = await req.json();
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -104,7 +109,7 @@ export async function DELETE(req: NextRequest) {
   const supabase = supabaseAdmin();
   // aksiyonlar tablosu ariza_kayit_id üzerinden "on delete cascade" olduğu için
   // bağlı aksiyonlar da otomatik silinir.
-  const { error } = await supabase.from('ariza_kayitlari').delete().in('id', ids);
+  const { error } = await supabase.from('ariza_kayitlari').delete().in('id', ids).eq('fabrika_id', session.fabrikaId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true, silinen: ids.length });
