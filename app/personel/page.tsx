@@ -34,6 +34,7 @@ export default function PersonelPage() {
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1>Bana Atanan Arızalar</h1>
         <div className="row">
+          <Link href="/personel/is-emirleri"><button className="secondary">İş Emirlerim</button></Link>
           <Link href="/personel/malzemeler"><button className="secondary">Gelen Malzemeler</button></Link>
           <Link href="/personel/aksiyonlar"><button className="secondary">Aksiyonlarım</button></Link>
         </div>

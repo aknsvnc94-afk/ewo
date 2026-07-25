@@ -22,6 +22,9 @@ uygulama gibi çalışır (PWA).
    - `supabase/schema_v3_guncelleme.sql`
    - `supabase/schema_v4_aksiyonlar.sql`
    - `supabase/schema_v5_siparis_ve_sira_no.sql`
+   - `supabase/schema_v6_siparis_onay.sql` (opsiyonel, artık kullanılmıyor ama zararsız)
+   - `supabase/schema_v7_genel_tesis.sql`
+   - `supabase/schema_v8_is_emirleri.sql`
 3. Kendi admin kullanıcını ekle (PIN'i kendi belirlediğinle değiştir):
    ```sql
    insert into personel (ad_soyad, kullanici_adi, pin_hash, rol)
@@ -110,6 +113,18 @@ Artık uygulama gibi ikonla açılır.
 kalibre edildi (stok kodu deseni: 2-6 harf + 6-10 rakam, örn. BYP20260763). Farklı bir ERP şablonu
 kullanırsanız, `app/api/siparis/upload/route.ts` içindeki `STOK_KODU_DESENI` ve `DETAY_DESENI`
 regex'lerinin güncellenmesi gerekebilir.
+
+13. **İş Emirleri (`/admin/is-emirleri`, personel için `/personel/is-emirleri`):** Günlük "açık iş
+    emirleri" Excel dökümünü (başlıksız, sabit sütunlu format) admin yükler — sistem İş Emri No,
+    Onarılan Kodu, Onarılan Tanımı, Problem Tanımı, Tarih ve Tesis Adı'nı otomatik çıkarır.
+    Admin bu iş emirlerini personele atar; personel kendi sayfasından yaptığı işi yazıp
+    **"İşi Bitir ve Kapat"** der — kapanma tarihi/saati ve kapatan kişi otomatik kaydedilir.
+    Mükerrer iş emri numaraları (aynı dosya tekrar yüklense bile) otomatik atlanır.
+
+**Not:** İş emri Excel formatının hiç başlık satırı yok, sütunlar sabit pozisyonda okunuyor
+(`lib/isEmriParse.ts` içindeki `SUTUN` sabitleri: Onarılan Kodu=3, Onarılan Tanımı=4,
+Problem Tanımı=5, Tarih=6, İş Emri No=7, Tesis Adı=31). ERP'niz farklı bir sütun sırası
+üretirse bu sabitlerin güncellenmesi gerekir.
 
 ## Sonraki Aşamalar (yol haritası)
 - [ ] Telegram bot ile yeni atama bildirimi (senin AnKA GLC botunla entegre edilebilir)
