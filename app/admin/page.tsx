@@ -35,6 +35,7 @@ export default function AdminPage() {
   const [kategoriFiltre, setKategoriFiltre] = useState('');
   const [durumFiltre, setDurumFiltre] = useState('');
   const [tezgahFiltre, setTezgahFiltre] = useState('');
+  const [atamaFiltre, setAtamaFiltre] = useState('');
   const [siralama, setSiralama] = useState<SiralamaAnahtari>('tarih_azalan');
   const [yukleniyor, setYukleniyor] = useState(false);
   const [mesaj, setMesaj] = useState('');
@@ -116,6 +117,16 @@ export default function AdminPage() {
     setSecililer(yeni);
   }
 
+  function tumunuSecToggle() {
+    const gorunenIdler = siraliKayitlar.map((k) => k.id);
+    const hepsiSecili = gorunenIdler.length > 0 && gorunenIdler.every((id) => secililer.has(id));
+    if (hepsiSecili) {
+      setSecililer(new Set());
+    } else {
+      setSecililer(new Set(gorunenIdler));
+    }
+  }
+
   async function ataYap() {
     if (!atanacakPersonel || secililer.size === 0) return;
     const res = await fetch('/api/assign', {
@@ -182,6 +193,8 @@ export default function AdminPage() {
     let liste = [...kayitlar];
     if (durumFiltre) liste = liste.filter((k) => k.tamamlanma_durumu === durumFiltre);
     if (tezgahFiltre) liste = liste.filter((k) => k.tezgah === tezgahFiltre);
+    if (atamaFiltre === 'atanmis') liste = liste.filter((k) => !!k.personel);
+    if (atamaFiltre === 'atanmamis') liste = liste.filter((k) => !k.personel);
     switch (siralama) {
       case 'tarih_artan': return liste.sort((a, b) => new Date(a.baslangic).getTime() - new Date(b.baslangic).getTime());
       case 'tarih_azalan': return liste.sort((a, b) => new Date(b.baslangic).getTime() - new Date(a.baslangic).getTime());
@@ -190,7 +203,7 @@ export default function AdminPage() {
       case 'tezgah_az': return liste.sort((a, b) => (a.tezgah || '').localeCompare(b.tezgah || ''));
       default: return liste;
     }
-  }, [kayitlar, siralama, durumFiltre, tezgahFiltre]);
+  }, [kayitlar, siralama, durumFiltre, tezgahFiltre, atamaFiltre]);
 
   const tezgahListesi = useMemo(() => {
     return Array.from(new Set(kayitlar.map((k) => k.tezgah).filter(Boolean))).sort();
@@ -276,6 +289,11 @@ export default function AdminPage() {
               <option value="">Tüm Makineler</option>
               {tezgahListesi.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
+            <select value={atamaFiltre} onChange={(e) => setAtamaFiltre(e.target.value)}>
+              <option value="">Atanmış / Atanmamış (Tümü)</option>
+              <option value="atanmis">Sadece Atanmış</option>
+              <option value="atanmamis">Sadece Atanmamış</option>
+            </select>
             <select value={siralama} onChange={(e) => setSiralama(e.target.value as SiralamaAnahtari)}>
               <option value="tarih_azalan">Tarih (Yeni → Eski)</option>
               <option value="tarih_artan">Tarih (Eski → Yeni)</option>
@@ -304,7 +322,14 @@ export default function AdminPage() {
         <table>
           <thead>
             <tr>
-              <th></th><th>Sıra No</th><th>ERP No</th><th>Tezgah</th><th>Kategori</th><th>Kalıp Kodu</th><th>Duruş</th><th>Açıklama</th><th>Başlangıç</th><th>Süre</th><th>Durum</th><th>Atanan</th><th></th>
+              <th>
+                <input
+                  type="checkbox"
+                  checked={siraliKayitlar.length > 0 && siraliKayitlar.every((k) => secililer.has(k.id))}
+                  onChange={tumunuSecToggle}
+                />
+              </th>
+              <th>Sıra No</th><th>ERP No</th><th>Tezgah</th><th>Kategori</th><th>Kalıp Kodu</th><th>Duruş</th><th>Açıklama</th><th>Başlangıç</th><th>Süre</th><th>Durum</th><th>Atanan</th><th></th>
             </tr>
           </thead>
           <tbody>
