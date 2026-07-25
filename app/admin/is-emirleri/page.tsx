@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { parseIsEmriBuffer } from '@/lib/isEmriParse';
 
@@ -11,6 +11,7 @@ type IsEmri = {
 };
 
 type Personel = { id: string; ad_soyad: string; aktif: boolean };
+type SiralamaAnahtari = 'tarih_azalan' | 'tarih_artan' | 'kodu_az';
 
 export default function IsEmirleriPage() {
   const [isEmirleri, setIsEmirleri] = useState<IsEmri[]>([]);
@@ -18,6 +19,8 @@ export default function IsEmirleriPage() {
   const [secililer, setSecililer] = useState<Set<string>>(new Set());
   const [atanacakPersonel, setAtanacakPersonel] = useState('');
   const [durumFiltre, setDurumFiltre] = useState('');
+  const [onarilanKoduFiltre, setOnarilanKoduFiltre] = useState('');
+  const [siralama, setSiralama] = useState<SiralamaAnahtari>('tarih_azalan');
   const [yukleniyor, setYukleniyor] = useState(false);
   const [mesaj, setMesaj] = useState('');
 
@@ -71,6 +74,27 @@ export default function IsEmirleriPage() {
     setSecililer(yeni);
   }
 
+  const siraliIsEmirleri = useMemo(() => {
+    let liste = [...isEmirleri];
+    if (onarilanKoduFiltre) liste = liste.filter((i) => i.onarilan_kodu === onarilanKoduFiltre);
+    switch (siralama) {
+      case 'tarih_artan': return liste.sort((a, b) => new Date(a.tarih).getTime() - new Date(b.tarih).getTime());
+      case 'tarih_azalan': return liste.sort((a, b) => new Date(b.tarih).getTime() - new Date(a.tarih).getTime());
+      case 'kodu_az': return liste.sort((a, b) => (a.onarilan_kodu || '').localeCompare(b.onarilan_kodu || ''));
+      default: return liste;
+    }
+  }, [isEmirleri, siralama, onarilanKoduFiltre]);
+
+  const onarilanKoduListesi = useMemo(() => {
+    return Array.from(new Set(isEmirleri.map((i) => i.onarilan_kodu).filter(Boolean))).sort();
+  }, [isEmirleri]);
+
+  function tumunuSecToggle() {
+    const gorunenIdler = siraliIsEmirleri.map((i) => i.id);
+    const hepsiSecili = gorunenIdler.length > 0 && gorunenIdler.every((id) => secililer.has(id));
+    setSecililer(hepsiSecili ? new Set() : new Set(gorunenIdler));
+  }
+
   async function ataYap() {
     if (!atanacakPersonel || secililer.size === 0) return;
     const res = await fetch('/api/is-emirleri/assign', {
@@ -85,11 +109,28 @@ export default function IsEmirleriPage() {
     }
   }
 
+  async function isEmriSil(idler: string[]) {
+    if (idler.length === 0) return;
+    const onayMesaji = idler.length === 1
+      ? 'Bu iş emrini kalıcı olarak silmek istediğinize emin misiniz?'
+      : `${idler.length} iş emrini kalıcı olarak silmek istediğinize emin misiniz?`;
+    if (!confirm(onayMesaji)) return;
+
+    const res = await fetch('/api/is-emirleri', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: idler }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setMesaj(`Hata: ${data.error}`); return; }
+    setMesaj(`✓ ${data.silinen} iş emri silindi`);
+    setSecililer(new Set());
+    verileriGetir();
+  }
+
   return (
     <div className="container">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1>İş Emirleri</h1>
-        <Link href="/admin"><button className="secondary">← Admin Paneline Dön</button></Link>
+        <Link href="/admin"><button className="secondary">← Panele Dön</button></Link>
       </div>
 
       <div className="card">
@@ -100,13 +141,24 @@ export default function IsEmirleriPage() {
       </div>
 
       <div className="card">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h3>İş Emirleri ({isEmirleri.length})</h3>
-          <select value={durumFiltre} onChange={(e) => setDurumFiltre(e.target.value)}>
-            <option value="">Tüm Durumlar</option>
-            <option value="Açık">Açık</option>
-            <option value="Kapatıldı">Kapatıldı</option>
-          </select>
+        <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <h3>İş Emirleri ({siraliIsEmirleri.length})</h3>
+          <div className="row">
+            <select value={durumFiltre} onChange={(e) => setDurumFiltre(e.target.value)}>
+              <option value="">Tüm Durumlar</option>
+              <option value="Açık">Açık</option>
+              <option value="Kapatıldı">Kapatıldı</option>
+            </select>
+            <select value={onarilanKoduFiltre} onChange={(e) => setOnarilanKoduFiltre(e.target.value)}>
+              <option value="">Tüm Makineler</option>
+              {onarilanKoduListesi.map((k) => <option key={k} value={k}>{k}</option>)}
+            </select>
+            <select value={siralama} onChange={(e) => setSiralama(e.target.value as SiralamaAnahtari)}>
+              <option value="tarih_azalan">Tarih (Yeni → Eski)</option>
+              <option value="tarih_artan">Tarih (Eski → Yeni)</option>
+              <option value="kodu_az">Onarılan Kodu (A-Z)</option>
+            </select>
+          </div>
         </div>
 
         <div className="row" style={{ margin: '12px 0' }}>
@@ -117,14 +169,26 @@ export default function IsEmirleriPage() {
           <button onClick={ataYap} disabled={!atanacakPersonel || secililer.size === 0}>
             Seçilenleri Ata ({secililer.size})
           </button>
+          <button className="danger" onClick={() => isEmriSil(Array.from(secililer))} disabled={secililer.size === 0}>
+            Seçilenleri Sil ({secililer.size})
+          </button>
         </div>
 
         <table>
           <thead>
-            <tr><th></th><th>İş Emri No</th><th>Onarılan Kodu</th><th>Onarılan Tanımı</th><th>Problem</th><th>Tarih</th><th>Durum</th><th>Atanan</th><th>Yapılan İş</th></tr>
+            <tr>
+              <th>
+                <input
+                  type="checkbox"
+                  checked={siraliIsEmirleri.length > 0 && siraliIsEmirleri.every((i) => secililer.has(i.id))}
+                  onChange={tumunuSecToggle}
+                />
+              </th>
+              <th>İş Emri No</th><th>Onarılan Kodu</th><th>Onarılan Tanımı</th><th>Problem</th><th>Tarih</th><th>Durum</th><th>Atanan</th><th>Yapılan İş</th><th></th>
+            </tr>
           </thead>
           <tbody>
-            {isEmirleri.map((i) => (
+            {siraliIsEmirleri.map((i) => (
               <tr key={i.id}>
                 <td><input type="checkbox" checked={secililer.has(i.id)} onChange={() => toggleSecim(i.id)} /></td>
                 <td>{i.is_emri_no}</td>
@@ -138,13 +202,14 @@ export default function IsEmirleriPage() {
                   {i.yapilan_is || '-'}
                   {i.kapatma_tarihi && <div style={{ fontSize: 11 }}>{i.kapatan?.ad_soyad} · {new Date(i.kapatma_tarihi).toLocaleString('tr-TR')}</div>}
                 </td>
+                <td><button className="danger" onClick={() => isEmriSil([i.id])}>Sil</button></td>
               </tr>
             ))}
           </tbody>
         </table>
 
         <div className="record-list mobile-only">
-          {isEmirleri.map((i) => (
+          {siraliIsEmirleri.map((i) => (
             <div key={i.id} className="record-item">
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <label className="row">
@@ -163,6 +228,7 @@ export default function IsEmirleriPage() {
                   {i.kapatan?.ad_soyad} · {i.kapatma_tarihi ? new Date(i.kapatma_tarihi).toLocaleString('tr-TR') : ''}
                 </div>
               )}
+              <button className="danger" style={{ marginTop: 8 }} onClick={() => isEmriSil([i.id])}>Sil</button>
             </div>
           ))}
         </div>
