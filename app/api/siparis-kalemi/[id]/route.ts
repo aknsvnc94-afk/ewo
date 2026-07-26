@@ -10,21 +10,49 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { alindi, makine_id } = await req.json();
   const supabase = supabaseAdmin();
 
-  const updatePayload: Record<string, any> = {};
   if (typeof alindi === 'boolean') {
-    Object.assign(updatePayload, alindi
+    const updatePayload = alindi
       ? { alindi: true, alan_personel_id: session.id, alinma_tarihi: new Date().toISOString() }
-      : { alindi: false, alan_personel_id: null, alinma_tarihi: null });
+      : { alindi: false, alan_personel_id: null, alinma_tarihi: null };
+    const { error } = await supabase.from('siparis_kalemleri').update(updatePayload).eq('id', params.id).eq('fabrika_id', session.fabrikaId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Makine eşleşmesini elle düzeltme: bu kaleme bağlı önceki eşleşme(ler) silinip
+  // (otomatik ayıklanmış olsun ya da önceden manuel seçilmiş olsun) seçilen tek
+  // makineyle yeniden oluşturulur.
   if (makine_id !== undefined) {
     if (session.rol !== 'admin') {
       return NextResponse.json({ error: 'Makine ataması sadece admin tarafından yapılabilir' }, { status: 403 });
     }
-    updatePayload.makine_id = makine_id || null;
-  }
 
-  const { error } = await supabase.from('siparis_kalemleri').update(updatePayload).eq('id', params.id).eq('fabrika_id', session.fabrikaId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const { data: kalem } = await supabase
+      .from('siparis_kalemleri').select('stok_kodu, satir_metni, fabrika_id').eq('id', params.id).single();
+    if (!kalem || kalem.fabrika_id !== session.fabrikaId) {
+      return NextResponse.json({ error: 'Kalem bulunamadı' }, { status: 404 });
+    }
+
+    await supabase.from('yedek_parcalar').delete().eq('siparis_kalemi_id', params.id);
+
+    if (makine_id) {
+      const { data: makine } = await supabase.from('makineler').select('fabrika_id').eq('id', makine_id).single();
+      if (!makine || makine.fabrika_id !== session.fabrikaId) {
+        return NextResponse.json({ error: 'Makine bulunamadı' }, { status: 404 });
+      }
+      const stokAdi = kalem.stok_kodu
+        ? kalem.satir_metni.split('—')[1]?.split('|')[0]?.trim()
+        : kalem.satir_metni;
+      const { error: insertErr } = await supabase.from('yedek_parcalar').insert({
+        fabrika_id: session.fabrikaId,
+        makine_id,
+        parca_kodu: kalem.stok_kodu,
+        parca_tanimi: stokAdi || kalem.satir_metni,
+        siparis_kalemi_id: params.id,
+        ekleyen_personel_id: session.id,
+      });
+      if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

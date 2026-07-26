@@ -25,21 +25,19 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   if (kalemErr) return NextResponse.json({ error: kalemErr.message }, { status: 500 });
 
-  // Yükleme sırasında AÇIKLAMA'dan otomatik ayıklanan makine eşleşmelerini
-  // (varsa) her kaleme salt-okunur olarak iliştir.
+  // Yükleme sırasında AÇIKLAMA'dan otomatik ayıklanan (veya manuel düzeltilen)
+  // makine eşleşmelerini her kaleme iliştir.
   const kalemIdler = (kalemler || []).map((k) => k.id);
-  const makineHaritasi: Record<string, string[]> = {};
+  const makineHaritasi: Record<string, { id: string; ad: string }[]> = {};
   if (kalemIdler.length > 0) {
     const { data: eslesenParcalar } = await supabase
       .from('yedek_parcalar')
-      .select('siparis_kalemi_id, makine:makine_id ( ad )')
+      .select('siparis_kalemi_id, makine:makine_id ( id, ad )')
       .in('siparis_kalemi_id', kalemIdler);
     (eslesenParcalar || []).forEach((p: any) => {
-      if (!p.siparis_kalemi_id) return;
-      const ad = p.makine?.ad;
-      if (!ad) return;
+      if (!p.siparis_kalemi_id || !p.makine) return;
       if (!makineHaritasi[p.siparis_kalemi_id]) makineHaritasi[p.siparis_kalemi_id] = [];
-      makineHaritasi[p.siparis_kalemi_id].push(ad);
+      makineHaritasi[p.siparis_kalemi_id].push({ id: p.makine.id, ad: p.makine.ad });
     });
   }
   const kalemlerZengin = (kalemler || []).map((k) => ({ ...k, makineler: makineHaritasi[k.id] || [] }));
