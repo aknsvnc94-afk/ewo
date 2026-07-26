@@ -76,3 +76,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   return NextResponse.json({ ok: true });
 }
+
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const session = readSession();
+  if (!session || session.rol !== 'admin') {
+    return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
+
+  const supabase = supabaseAdmin();
+  // siparis_kalemleri (ve buradan otomatik oluşan yedek_parcalar kayıtları)
+  // "on delete cascade" olduğu için otomatik silinir.
+  const { error } = await supabase.from('siparisler').delete().eq('id', params.id).eq('fabrika_id', session.fabrikaId);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
+}

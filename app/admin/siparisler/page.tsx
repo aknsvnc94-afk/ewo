@@ -23,6 +23,17 @@ export default function SiparislerPage() {
 
   useEffect(() => { getir(); }, []);
 
+  async function siparisSil(s: Siparis, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`"${s.talep_no ? `Talep No: ${s.talep_no}` : s.dosya_adi}" siparişini ve tüm kalemlerini KALICI olarak silmek istediğinize emin misiniz?`)) return;
+    const res = await fetch(`/api/siparis/${s.id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) { setMesaj(`Hata: ${data.error}`); return; }
+    setMesaj('✓ Sipariş silindi');
+    getir();
+  }
+
   async function dosyaYukle(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -75,6 +86,9 @@ export default function SiparislerPage() {
                 <div className="muted">
                   {s.tarih ? `Talep Tarihi: ${s.tarih} · ` : ''}
                   Yüklenme: {new Date(s.yuklenme_tarihi).toLocaleString('tr-TR')} · Yükleyen: {s.yukleyen?.ad_soyad || '-'}
+                </div>
+                <div className="row" style={{ marginTop: 8 }}>
+                  <button className="danger" onClick={(e) => siparisSil(s, e)}>Sil</button>
                 </div>
               </div>
             </Link>

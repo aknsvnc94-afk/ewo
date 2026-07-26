@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 type Kalem = {
@@ -26,6 +26,7 @@ function gecikmisMi(teslimTarihi: string | null, alindi: boolean) {
 
 export default function SiparisDetayPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params?.id as string;
   const [siparis, setSiparis] = useState<any>(null);
   const [kalemler, setKalemler] = useState<Kalem[]>([]);
@@ -40,6 +41,12 @@ export default function SiparisDetayPage() {
   }
 
   useEffect(() => { getir(); }, [id]);
+
+  async function siparisSil() {
+    if (!confirm('Bu siparişi ve tüm kalemlerini KALICI olarak silmek istediğinize emin misiniz?')) return;
+    const res = await fetch(`/api/siparis/${id}`, { method: 'DELETE' });
+    if (res.ok) router.push('/admin/siparisler');
+  }
 
   async function alindiIsaretle(kalemId: string, deger: boolean) {
     setIsleniyor(kalemId);
@@ -61,7 +68,10 @@ export default function SiparisDetayPage() {
     <div className="container">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1>{siparis.talep_no ? `Talep No: ${siparis.talep_no}` : siparis.dosya_adi}</h1>
-        <Link href="/admin/siparisler"><button className="secondary">← Sipariş Listesine Dön</button></Link>
+        <div className="row">
+          <button className="danger" onClick={siparisSil}>Siparişi Sil</button>
+          <Link href="/admin/siparisler"><button className="secondary">← Sipariş Listesine Dön</button></Link>
+        </div>
       </div>
       <p className="muted">
         {siparis.bolum && <>Bölüm: {siparis.bolum} · </>}

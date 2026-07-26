@@ -16,6 +16,8 @@ export default function MakinelerPage() {
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [duzenlenenId, setDuzenlenenId] = useState<string | null>(null);
   const [duzenleForm, setDuzenleForm] = useState({ parca_kodu: '', parca_tanimi: '' });
+  const [duzenlenenMakineId, setDuzenlenenMakineId] = useState<string | null>(null);
+  const [makineAdiDuzenle, setMakineAdiDuzenle] = useState('');
 
   async function makineleriGetir() {
     const res = await fetch('/api/makineler');
@@ -108,6 +110,43 @@ export default function MakinelerPage() {
     }
   }
 
+  function makineDuzenlemeyeBasla(m: Makine) {
+    setDuzenlenenMakineId(m.id);
+    setMakineAdiDuzenle(m.ad);
+    setMesaj('');
+  }
+
+  async function makineAdiKaydet(id: string) {
+    if (!makineAdiDuzenle.trim()) return;
+    setKaydediliyor(true);
+    try {
+      const res = await fetch(`/api/makineler/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ad: makineAdiDuzenle }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setMesaj(`Hata: ${data.error}`); return; }
+      setDuzenlenenMakineId(null);
+      await makineleriGetir();
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  async function makineSil(m: Makine) {
+    if (!confirm(`"${m.ad}" makinesini ve bu makineye ait tüm yedek parça kayıtlarını KALICI olarak silmek istediğinize emin misiniz?`)) return;
+    setKaydediliyor(true);
+    try {
+      const res = await fetch(`/api/makineler/${m.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) { setMesaj(`Hata: ${data.error}`); return; }
+      if (seciliMakineId === m.id) setSeciliMakineId('');
+      await makineleriGetir();
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
   return (
     <div className="container">
       <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -124,11 +163,30 @@ export default function MakinelerPage() {
       </div>
 
       <div className="card">
-        <h3>Makine Seç</h3>
-        <select value={seciliMakineId} onChange={(e) => setSeciliMakineId(e.target.value)} style={{ maxWidth: 320 }}>
-          <option value="">Makine seçin...</option>
-          {makineler.map((m) => <option key={m.id} value={m.id}>{m.ad}</option>)}
-        </select>
+        <h3>Makineler ({makineler.length})</h3>
+        <div className="record-list">
+          {makineler.length === 0 && <p className="muted">Henüz makine eklenmedi.</p>}
+          {makineler.map((m) => (
+            <div key={m.id} className="record-item" style={{ borderColor: seciliMakineId === m.id ? 'var(--accent)' : undefined }}>
+              {duzenlenenMakineId === m.id ? (
+                <div className="row">
+                  <input value={makineAdiDuzenle} onChange={(e) => setMakineAdiDuzenle(e.target.value)} style={{ flex: 1 }} />
+                  <button onClick={() => makineAdiKaydet(m.id)} disabled={kaydediliyor}>Kaydet</button>
+                  <button className="secondary" onClick={() => setDuzenlenenMakineId(null)}>Vazgeç</button>
+                </div>
+              ) : (
+                <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <strong style={{ cursor: 'pointer' }} onClick={() => setSeciliMakineId(m.id)}>{m.ad}</strong>
+                  <div className="row">
+                    <button className="secondary" onClick={() => setSeciliMakineId(m.id)}>Parçaları Göster</button>
+                    <button className="secondary" onClick={() => makineDuzenlemeyeBasla(m)}>Düzenle</button>
+                    <button className="danger" onClick={() => makineSil(m)}>Sil</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       {mesaj && <p>{mesaj}</p>}
