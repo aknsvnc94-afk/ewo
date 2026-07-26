@@ -9,6 +9,10 @@ const BUCKET = 'siparis-pdfler';
 const STOK_KODU_DESENI = /\b[A-ZÇĞİÖŞÜ]{2,6}\d{6,10}/g;
 // Bir kalem bloğu içinde miktar + teslim tarihi: "5,00 AD28.07.2026" gibi
 const DETAY_DESENI = /(\d+[.,]\d{1,2})\s*(AD|ADET|KG|LT|M2|M3|M)?\s*(\d{2}\.\d{2}\.\d{4})/i;
+// AÇIKLAMA sütununda yazılan makine kodları: "FOM-MB021" gibi (harf-harf/rakam
+// birleşimi, tireyle ayrılmış). Ayraç "/" (yeni format) veya " - " (eski format)
+// fark etmeksizin, kod şeklinden tanınır — stok adı metninde bu şekle rastlanmaz.
+const MAKINE_KODU_DESENI = /\b[A-ZÇĞİÖŞÜ]{2,6}-[A-Z0-9ÇĞİÖŞÜ]{2,8}\b/g;
 
 function metniAyristir(hamMetin: string) {
   const talepNoTarih = hamMetin.match(/(\d{2}\.\d{2}\.\d{4})\s*\n?\s*SATINALMA TALEP FORMU\s*\n?\s*(\d+)/i);
@@ -25,7 +29,10 @@ function metniAyristir(hamMetin: string) {
   const eslesmeler = [...hamMetin.matchAll(STOK_KODU_DESENI)];
   const bitisIsaretleri = ['DEPARTMAN SORUMLUSU', 'SATIN ALMA SORUMLUSU', 'TALEP ONAYI', 'Onay Tarihi'];
 
-  const kalemler: { satir_metni: string; stok_kodu: string | null; miktar: string | null; teslim_tarihi: string | null }[] = [];
+  const kalemler: {
+    satir_metni: string; stok_kodu: string | null; stok_adi: string | null;
+    miktar: string | null; teslim_tarihi: string | null; makine_kodlari: string[];
+  }[] = [];
 
   if (eslesmeler.length > 0) {
     for (let i = 0; i < eslesmeler.length; i++) {
@@ -49,16 +56,32 @@ function metniAyristir(hamMetin: string) {
         aciklamaKismi = gerisi.slice(0, detay.index).trim();
       }
 
-      const satirMetni = `${stokKodu} — ${aciklamaKismi}`
+      // "Stok Adı" ile PDF'teki AÇIKLAMA (makine kodları) metni, satır kaydırma
+      // yüzünden ham metinde ayraçsız birleşik geliyor. Makine kodu deseninin
+      // ilk göründüğü noktadan böl: öncesi stok adı, sonrası açıklama.
+      const makineKodlari = Array.from(new Set(aciklamaKismi.match(MAKINE_KODU_DESENI) || []));
+      let stokAdi = aciklamaKismi;
+      let ekAciklama = '';
+      if (makineKodlari.length > 0) {
+        const ilkKodIndex = aciklamaKismi.search(MAKINE_KODU_DESENI);
+        stokAdi = aciklamaKismi.slice(0, ilkKodIndex).trim();
+        ekAciklama = aciklamaKismi.slice(ilkKodIndex).trim();
+      }
+
+      const satirMetni = `${stokKodu} — ${stokAdi}`
+        + (ekAciklama ? ` | Not: ${ekAciklama}` : '')
         + (miktar ? ` | Miktar: ${miktar}` : '')
         + (teslimTarihi ? ` | Teslim: ${teslimTarihi}` : '');
 
-      kalemler.push({ satir_metni: satirMetni, stok_kodu: stokKodu, miktar, teslim_tarihi: teslimTarihi });
+      kalemler.push({
+        satir_metni: satirMetni, stok_kodu: stokKodu, stok_adi: stokAdi || null,
+        miktar, teslim_tarihi: teslimTarihi, makine_kodlari: makineKodlari,
+      });
     }
   } else {
     // Tanınan bir stok kodu deseni bulunamazsa: genel satır satır dökümüne düş
     hamMetin.split('\n').map((s) => s.trim()).filter((s) => s.length > 0).forEach((satir) => {
-      kalemler.push({ satir_metni: satir, stok_kodu: null, miktar: null, teslim_tarihi: null });
+      kalemler.push({ satir_metni: satir, stok_kodu: null, stok_adi: null, miktar: null, teslim_tarihi: null, makine_kodlari: [] });
     });
   }
 
@@ -121,21 +144,66 @@ export async function POST(req: NextRequest) {
 
   if (siparisErr) return NextResponse.json({ error: siparisErr.message }, { status: 500 });
 
-  const eklenecekKalemler = kalemler.map((k, i) => ({
-    siparis_id: siparis.id,
-    fabrika_id: session.fabrikaId,
-    sira: i,
-    satir_metni: k.satir_metni,
-    stok_kodu: k.stok_kodu,
-    miktar: k.miktar,
-    teslim_tarihi: k.teslim_tarihi,
-  }));
+  // Makine adı -> id önbelleği (aynı istek içinde aynı makine birden çok kalemde
+  // geçebilir, tekrar tekrar sorgulamamak/duplicate oluşturmamak için).
+  const makineIdOnbellek = new Map<string, string>();
+  async function makineIdBul(ad: string): Promise<string> {
+    const anahtarli = ad.trim();
+    if (makineIdOnbellek.has(anahtarli)) return makineIdOnbellek.get(anahtarli)!;
+    const { data: mevcut } = await supabase
+      .from('makineler').select('id').eq('fabrika_id', session!.fabrikaId).eq('ad', anahtarli).maybeSingle();
+    if (mevcut) { makineIdOnbellek.set(anahtarli, mevcut.id); return mevcut.id; }
+    const { data: yeni, error: yeniErr } = await supabase
+      .from('makineler').insert({ ad: anahtarli, fabrika_id: session!.fabrikaId }).select('id').single();
+    if (yeniErr) {
+      // Aynı anda başka bir kalem aynı makineyi oluşturmuş olabilir (unique çakışması) — tekrar oku.
+      const { data: tekrar } = await supabase
+        .from('makineler').select('id').eq('fabrika_id', session!.fabrikaId).eq('ad', anahtarli).single();
+      if (tekrar) { makineIdOnbellek.set(anahtarli, tekrar.id); return tekrar.id; }
+      throw new Error(yeniErr.message);
+    }
+    makineIdOnbellek.set(anahtarli, yeni.id);
+    return yeni.id;
+  }
 
-  const { error: kalemErr } = await supabase.from('siparis_kalemleri').insert(eklenecekKalemler);
-  if (kalemErr) return NextResponse.json({ error: kalemErr.message }, { status: 500 });
+  let eslenenParcaSayisi = 0;
+  let sira = 0;
+  for (const k of kalemler) {
+    const { data: kalemKaydi, error: kalemErr } = await supabase.from('siparis_kalemleri').insert({
+      siparis_id: siparis.id,
+      fabrika_id: session.fabrikaId,
+      sira: sira++,
+      satir_metni: k.satir_metni,
+      stok_kodu: k.stok_kodu,
+      miktar: k.miktar,
+      teslim_tarihi: k.teslim_tarihi,
+    }).select('id').single();
+
+    if (kalemErr) return NextResponse.json({ error: kalemErr.message }, { status: 500 });
+
+    if (k.makine_kodlari.length > 0 && k.stok_adi) {
+      for (const makineKodu of k.makine_kodlari) {
+        try {
+          const makineId = await makineIdBul(makineKodu);
+          const { error: parcaErr } = await supabase.from('yedek_parcalar').insert({
+            fabrika_id: session.fabrikaId,
+            makine_id: makineId,
+            parca_kodu: k.stok_kodu,
+            parca_tanimi: k.stok_adi,
+            siparis_kalemi_id: kalemKaydi.id,
+            ekleyen_personel_id: session.id,
+          });
+          if (!parcaErr) eslenenParcaSayisi += 1;
+        } catch {
+          // Makine oluşturma/parça ekleme başarısız olursa siparişin geri kalanını engellemesin.
+        }
+      }
+    }
+  }
 
   return NextResponse.json({
-    ok: true, id: siparis.id, kalem_sayisi: eklenecekKalemler.length,
+    ok: true, id: siparis.id, kalem_sayisi: kalemler.length,
     talep_no: baslikBilgisi.talep_no, tarih: baslikBilgisi.tarih,
+    makine_eslesme_sayisi: eslenenParcaSayisi,
   });
 }

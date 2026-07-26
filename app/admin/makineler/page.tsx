@@ -14,6 +14,8 @@ export default function MakinelerPage() {
   const [yeniParcaTanimi, setYeniParcaTanimi] = useState('');
   const [mesaj, setMesaj] = useState('');
   const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [duzenlenenId, setDuzenlenenId] = useState<string | null>(null);
+  const [duzenleForm, setDuzenleForm] = useState({ parca_kodu: '', parca_tanimi: '' });
 
   async function makineleriGetir() {
     const res = await fetch('/api/makineler');
@@ -71,6 +73,41 @@ export default function MakinelerPage() {
     }
   }
 
+  function duzenlemeyeBasla(p: Parca) {
+    setDuzenlenenId(p.id);
+    setDuzenleForm({ parca_kodu: p.parca_kodu || '', parca_tanimi: p.parca_tanimi });
+    setMesaj('');
+  }
+
+  async function duzenlemeyiKaydet(id: string) {
+    setKaydediliyor(true);
+    try {
+      const res = await fetch(`/api/yedek-parcalar/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parca_kodu: duzenleForm.parca_kodu, parca_tanimi: duzenleForm.parca_tanimi }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setMesaj(`Hata: ${data.error}`); return; }
+      setDuzenlenenId(null);
+      await parcalariGetir(seciliMakineId);
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  async function parcaSil(p: Parca) {
+    if (!confirm(`"${p.parca_tanimi}" parçasını silmek istediğinize emin misiniz?`)) return;
+    setKaydediliyor(true);
+    try {
+      const res = await fetch(`/api/yedek-parcalar/${p.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) { setMesaj(`Hata: ${data.error}`); return; }
+      await parcalariGetir(seciliMakineId);
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
   return (
     <div className="container">
       <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -109,17 +146,38 @@ export default function MakinelerPage() {
           <div className="record-list">
             {parcalar.length === 0 && <p className="muted">Henüz kayıtlı parça yok.</p>}
             {parcalar.map((p) => (
-              <div key={`${p.kaynak}-${p.id}`} className="record-item">
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <strong>{p.parca_kodu ? `${p.parca_kodu} — ${p.parca_tanimi}` : p.parca_tanimi}</strong>
-                  <span className={p.kaynak === 'manuel' ? 'badge badge-BA' : 'badge badge-MA'}>
-                    {p.kaynak === 'manuel' ? 'Manuel' : 'Sipariş'}
-                  </span>
-                </div>
-                <div className="muted">
-                  {p.tarih ? new Date(p.tarih).toLocaleDateString('tr-TR') : '-'}
-                  {p.ekleyen ? ` · ${p.ekleyen}` : ''}
-                </div>
+              <div key={p.id} className="record-item">
+                {duzenlenenId === p.id ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label className="muted">Parça Kodu
+                      <input value={duzenleForm.parca_kodu} onChange={(e) => setDuzenleForm({ ...duzenleForm, parca_kodu: e.target.value })} style={{ width: '100%', marginTop: 4 }} />
+                    </label>
+                    <label className="muted">Parça Tanımı
+                      <input value={duzenleForm.parca_tanimi} onChange={(e) => setDuzenleForm({ ...duzenleForm, parca_tanimi: e.target.value })} style={{ width: '100%', marginTop: 4 }} />
+                    </label>
+                    <div className="row">
+                      <button onClick={() => duzenlemeyiKaydet(p.id)} disabled={kaydediliyor}>Kaydet</button>
+                      <button className="secondary" onClick={() => setDuzenlenenId(null)}>Vazgeç</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="row" style={{ justifyContent: 'space-between' }}>
+                      <strong>{p.parca_kodu ? `${p.parca_kodu} — ${p.parca_tanimi}` : p.parca_tanimi}</strong>
+                      <span className={p.kaynak === 'manuel' ? 'badge badge-BA' : 'badge badge-MA'}>
+                        {p.kaynak === 'manuel' ? 'Manuel' : 'Sipariş'}
+                      </span>
+                    </div>
+                    <div className="muted">
+                      {p.tarih ? new Date(p.tarih).toLocaleDateString('tr-TR') : '-'}
+                      {p.ekleyen ? ` · ${p.ekleyen}` : ''}
+                    </div>
+                    <div className="row" style={{ marginTop: 8 }}>
+                      <button className="secondary" onClick={() => duzenlemeyeBasla(p)}>Düzenle</button>
+                      <button className="danger" onClick={() => parcaSil(p)}>Sil</button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>

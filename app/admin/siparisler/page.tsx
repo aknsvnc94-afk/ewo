@@ -34,7 +34,8 @@ export default function SiparislerPage() {
       const res = await fetch('/api/siparis/upload', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) { setMesaj(`Hata: ${data.error}`); return; }
-      setMesaj(`✓ ${data.kalem_sayisi} satır çıkarıldı`);
+      const makineMesaji = data.makine_eslesme_sayisi > 0 ? `, ${data.makine_eslesme_sayisi} makine eşleşmesi bulundu` : '';
+      setMesaj(`✓ ${data.kalem_sayisi} satır çıkarıldı${makineMesaji}`);
       getir();
     } finally {
       setYukleniyor(false);

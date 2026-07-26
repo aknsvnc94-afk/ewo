@@ -19,6 +19,7 @@ type Kayit = {
 export default function PersonelPage() {
   const [kayitlar, setKayitlar] = useState<Kayit[]>([]);
   const [fabrikaAdim, setFabrikaAdim] = useState<string | null>(null);
+  const [adSoyad, setAdSoyad] = useState<string | null>(null);
   const [tezgahFiltre, setTezgahFiltre] = useState('');
   const [durumFiltre, setDurumFiltre] = useState('');
 
@@ -30,7 +31,10 @@ export default function PersonelPage() {
 
   useEffect(() => {
     verileriGetir();
-    fetch('/api/auth/me').then((r) => r.json()).then((d) => setFabrikaAdim(d.fabrikaAd || null)).catch(() => {});
+    fetch('/api/auth/me').then((r) => r.json()).then((d) => {
+      setFabrikaAdim(d.fabrikaAd || null);
+      setAdSoyad(d.ad_soyad || null);
+    }).catch(() => {});
   }, []);
 
   const toplam = kayitlar.length;
@@ -63,8 +67,8 @@ export default function PersonelPage() {
     <div className="container">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <div>
-          <h1>Bana Atanan Arızalar</h1>
-          {fabrikaAdim && <div className="muted">Fabrika: {fabrikaAdim}</div>}
+          <h1>{adSoyad || 'Arızalarım'}</h1>
+          <div className="muted">Bana Atanan Arızalar{fabrikaAdim ? ` · ${fabrikaAdim}` : ''}</div>
         </div>
         <div className="row">
           <Link href="/personel/is-emirleri"><button className="secondary">İş Emirlerim</button></Link>
