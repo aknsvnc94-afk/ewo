@@ -7,7 +7,7 @@ const ALLOWED_STATUS = ['Beklemede', 'Devam Ediyor', 'Onay Bekliyor', 'Tamamland
 // Personelin ve adminin güncelleyebileceği alanlar (EWO formu - F13-31 + temel kayıt bilgileri)
 const GUNCELLENEBILIR_ALANLAR = [
   'aksiyon', 'hedef_tarih', 'tamamlanma_durumu', 'kok_neden_turu',
-  'ariza_turu', 'arizanin_tanimi', 'direk_sebep_cozum',
+  'ariza_turu', 'arizanin_tanimi', 'direk_sebep_cozum', 'cozum',
   'zaman_ariza_baslangic', 'zaman_mudahale_baslangic', 'zaman_teshis_baslangic',
   'zaman_tamir_baslangic', 'zaman_yedek_parca_bekleme', 'zaman_montaj_baslangic',
   'zaman_makine_baslatilma', 'zaman_uretim_baslangic',

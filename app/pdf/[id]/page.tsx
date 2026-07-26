@@ -95,7 +95,8 @@ export default function PdfGorunumuPage() {
         <table className="pdf-table">
           <tbody>
             <tr><td className="lbl" style={{ width: 160 }}>Arızanın tanımı</td><td>{kayit.arizanin_tanimi || ''}</td></tr>
-            <tr><td className="lbl">Direk Sebep ve çözümü</td><td>{kayit.direk_sebep_cozum || ''}</td></tr>
+            <tr><td className="lbl">Direk Sebep</td><td>{kayit.direk_sebep_cozum || ''}</td></tr>
+            <tr><td className="lbl">Çözüm</td><td>{kayit.cozum || ''}</td></tr>
           </tbody>
         </table>
 

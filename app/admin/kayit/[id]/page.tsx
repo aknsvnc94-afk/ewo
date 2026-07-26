@@ -96,7 +96,21 @@ export default function AdminKayitFormu() {
     alan('zaman_uretim_baslangic', tarihSaatInput(bitis.toISOString()));
   }
 
-  async function kaydet() {
+  function temelAlanlarGecerliMi(): boolean {
+    if (!form.direk_sebep.trim() || !form.kok_neden_turu) {
+      setMesaj('Hata: Direk Sebep ve Kök Neden Tipi alanları zorunludur.');
+      return false;
+    }
+    return true;
+  }
+
+  function enAzBirAksiyonGecerli(): boolean {
+    return [...form.onlemler_kok_neden, ...form.onlemler_sifir_ariza]
+      .some((o: Onlem) => o.aciklama.trim().length > 0 && !!o.sorumlu_personel_id);
+  }
+
+  async function kaydet(): Promise<boolean> {
+    if (!temelAlanlarGecerliMi()) return false;
     setIsleniyor(true);
     setMesaj('');
     try {
@@ -115,7 +129,7 @@ export default function AdminKayitFormu() {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) { setMesaj(`Hata: ${data.error}`); return; }
+      if (!res.ok) { setMesaj(`Hata: ${data.error}`); return false; }
 
       // Önlemleri izlenebilir aksiyonlara senkronize et
       await fetch('/api/aksiyonlar/sync', {
@@ -128,6 +142,7 @@ export default function AdminKayitFormu() {
       });
 
       setMesaj('✓ Kaydedildi ve aksiyonlar güncellendi');
+      return true;
     } finally {
       setIsleniyor(false);
     }
@@ -147,6 +162,18 @@ export default function AdminKayitFormu() {
     } finally {
       setIsleniyor(false);
     }
+  }
+
+  async function tamamlaOnayla() {
+    setMesaj('');
+    if (!temelAlanlarGecerliMi()) return;
+    if (!enAzBirAksiyonGecerli()) {
+      setMesaj('Hata: "Tamamlandı" işaretlemek için Kök Nedene Karşı Önlemler veya Sıfır Arızayı Sürdürmek eylemlerinden en az birine açıklama VE sorumlu personel girilmelidir.');
+      return;
+    }
+    const kaydedildi = await kaydet();
+    if (!kaydedildi) return;
+    await durumGuncelle('Tamamlandı');
   }
 
   if (!kayit || !form) return <div className="container"><p className="muted">{mesaj || 'Yükleniyor...'}</p></div>;
@@ -177,7 +204,8 @@ export default function AdminKayitFormu() {
         <h3>Personelin Bildirdiği Bilgiler</h3>
         <p><strong>Arıza Türü:</strong> {(kayit.ariza_turu || []).join(', ') || '-'}</p>
         <p><strong>Arızanın tanımı:</strong> {kayit.arizanin_tanimi || '-'}</p>
-        <p><strong>Direk sebep ve çözüm:</strong> {kayit.direk_sebep_cozum || '-'}</p>
+        <p><strong>Direk Sebep:</strong> {kayit.direk_sebep_cozum || '-'}</p>
+        <p><strong>Çözüm:</strong> {kayit.cozum || '-'}</p>
         {(kayit.cozum_resimleri || []).length > 0 && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {kayit.cozum_resimleri.map((url: string) => (
@@ -213,7 +241,7 @@ export default function AdminKayitFormu() {
       <div className="card">
         <h3>Kök Neden Analizi (5 Neden — gerekirse doldurun)</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-          <label className="muted">Direk Sebep
+          <label className="muted">Direk Sebep *
             <input value={form.direk_sebep} onChange={(e) => alan('direk_sebep', e.target.value)} style={{ width: '100%', marginTop: 4 }} />
           </label>
           {['neden_1', 'neden_2', 'neden_3', 'neden_4', 'neden_5'].map((k, i) => (
@@ -222,7 +250,7 @@ export default function AdminKayitFormu() {
             </label>
           ))}
         </div>
-        <label className="muted" style={{ display: 'block', marginTop: 10 }}>Kök Sebep Tipi
+        <label className="muted" style={{ display: 'block', marginTop: 10 }}>Kök Sebep Tipi *
           <select value={form.kok_neden_turu} onChange={(e) => alan('kok_neden_turu', e.target.value)} style={{ width: '100%', marginTop: 4 }}>
             <option value="">Seçiniz...</option>
             {KOK_SEBEP_TIPLERI.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -283,7 +311,7 @@ export default function AdminKayitFormu() {
 
       <div className="row" style={{ marginBottom: 24, flexWrap: 'wrap' }}>
         <button onClick={kaydet} disabled={isleniyor}>Formu Kaydet</button>
-        <button onClick={() => durumGuncelle('Tamamlandı')} disabled={isleniyor}>Onayla (Tamamlandı)</button>
+        <button onClick={tamamlaOnayla} disabled={isleniyor}>Onayla (Tamamlandı)</button>
         <button className="secondary" onClick={() => durumGuncelle('Devam Ediyor')} disabled={isleniyor}>Personele Geri Gönder</button>
         <a href={`/pdf/${id}`} target="_blank" rel="noopener noreferrer"><button className="secondary">PDF Görüntüle/İndir</button></a>
       </div>

@@ -107,6 +107,9 @@ export default function EwoAnalizPage() {
             <div className="card" style={{ flex: 1, minWidth: 100, textAlign: 'center', margin: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 700 }} className="status-Tamamlandı">{veri.kapali}</div>
               <div className="muted">Kapalı (Onaylı) EWO</div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                {veri.toplam > 0 ? `%${((veri.kapali / veri.toplam) * 100).toFixed(0)} kapanma oranı` : '-'}
+              </div>
             </div>
           </div>
 

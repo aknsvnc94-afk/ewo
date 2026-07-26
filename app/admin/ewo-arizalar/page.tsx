@@ -20,6 +20,7 @@ type Kayit = {
   sure: string;
   sure_sn: number;
   tamamlanma_durumu: string;
+  atanan_personel_id: string | null;
   personel: { ad_soyad: string } | null;
 };
 
@@ -36,6 +37,7 @@ export default function AdminPage() {
   const [durumFiltre, setDurumFiltre] = useState('');
   const [tezgahFiltre, setTezgahFiltre] = useState('');
   const [atamaFiltre, setAtamaFiltre] = useState('');
+  const [personelFiltre, setPersonelFiltre] = useState('');
   const [siralama, setSiralama] = useState<SiralamaAnahtari>('tarih_azalan');
   const [yukleniyor, setYukleniyor] = useState(false);
   const [mesaj, setMesaj] = useState('');
@@ -195,6 +197,7 @@ export default function AdminPage() {
     if (tezgahFiltre) liste = liste.filter((k) => k.tezgah === tezgahFiltre);
     if (atamaFiltre === 'atanmis') liste = liste.filter((k) => !!k.personel);
     if (atamaFiltre === 'atanmamis') liste = liste.filter((k) => !k.personel);
+    if (personelFiltre) liste = liste.filter((k) => k.atanan_personel_id === personelFiltre);
     switch (siralama) {
       case 'tarih_artan': return liste.sort((a, b) => new Date(a.baslangic).getTime() - new Date(b.baslangic).getTime());
       case 'tarih_azalan': return liste.sort((a, b) => new Date(b.baslangic).getTime() - new Date(a.baslangic).getTime());
@@ -203,7 +206,7 @@ export default function AdminPage() {
       case 'tezgah_az': return liste.sort((a, b) => (a.tezgah || '').localeCompare(b.tezgah || ''));
       default: return liste;
     }
-  }, [kayitlar, siralama, durumFiltre, tezgahFiltre, atamaFiltre]);
+  }, [kayitlar, siralama, durumFiltre, tezgahFiltre, atamaFiltre, personelFiltre]);
 
   const tezgahListesi = useMemo(() => {
     return Array.from(new Set(kayitlar.map((k) => k.tezgah).filter(Boolean))).sort();
@@ -262,6 +265,10 @@ export default function AdminPage() {
               <option value="">Atanmış / Atanmamış (Tümü)</option>
               <option value="atanmis">Sadece Atanmış</option>
               <option value="atanmamis">Sadece Atanmamış</option>
+            </select>
+            <select value={personelFiltre} onChange={(e) => setPersonelFiltre(e.target.value)}>
+              <option value="">Tüm Personel</option>
+              {personelListesi.map((p) => <option key={p.id} value={p.id}>{p.ad_soyad}</option>)}
             </select>
             <select value={siralama} onChange={(e) => setSiralama(e.target.value as SiralamaAnahtari)}>
               <option value="tarih_azalan">Tarih (Yeni → Eski)</option>

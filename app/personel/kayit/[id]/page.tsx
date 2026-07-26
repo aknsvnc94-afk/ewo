@@ -17,6 +17,7 @@ export default function PersonelKayitFormu() {
   const [kayit, setKayit] = useState<any>(null);
   const [arizaTuru, setArizaTuru] = useState<string[]>([]);
   const [tanim, setTanim] = useState('');
+  const [direkSebep, setDirekSebep] = useState('');
   const [cozum, setCozum] = useState('');
   const [resimler, setResimler] = useState<string[]>([]);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -30,7 +31,8 @@ export default function PersonelKayitFormu() {
         setKayit(data.kayit);
         setArizaTuru(data.kayit.ariza_turu || []);
         setTanim(data.kayit.arizanin_tanimi || '');
-        setCozum(data.kayit.direk_sebep_cozum || '');
+        setDirekSebep(data.kayit.direk_sebep_cozum || '');
+        setCozum(data.kayit.cozum || '');
         setResimler(data.kayit.cozum_resimleri || []);
       });
   }, [id]);
@@ -39,7 +41,10 @@ export default function PersonelKayitFormu() {
     setArizaTuru((mevcut) => (mevcut.includes(tur) ? mevcut.filter((t) => t !== tur) : [...mevcut, tur]));
   }
 
-  const gecerli = arizaTuru.length > 0 && tanim.trim().length >= MIN_KARAKTER && cozum.trim().length >= MIN_KARAKTER;
+  const gecerli = arizaTuru.length > 0
+    && tanim.trim().length >= MIN_KARAKTER
+    && direkSebep.trim().length >= MIN_KARAKTER
+    && cozum.trim().length >= MIN_KARAKTER;
 
   async function kaydet(gonder: boolean) {
     setKaydediliyor(true);
@@ -49,7 +54,8 @@ export default function PersonelKayitFormu() {
         id,
         ariza_turu: arizaTuru,
         arizanin_tanimi: tanim,
-        direk_sebep_cozum: cozum,
+        direk_sebep_cozum: direkSebep,
+        cozum,
       };
       if (gonder) payload.tamamlanma_durumu = 'Onay Bekliyor';
 
@@ -131,7 +137,20 @@ export default function PersonelKayitFormu() {
       </div>
 
       <div className="card">
-        <h3>Direk Sebep ve Çözümü *</h3>
+        <h3>Direk Sebep *</h3>
+        <textarea
+          value={direkSebep}
+          onChange={(e) => setDirekSebep(e.target.value)}
+          rows={4}
+          minLength={MIN_KARAKTER}
+          placeholder={`En az ${MIN_KARAKTER} karakter yazın...`}
+          style={{ width: '100%' }}
+        />
+        <div className="muted">{direkSebep.trim().length}/{MIN_KARAKTER} karakter</div>
+      </div>
+
+      <div className="card">
+        <h3>Çözüm *</h3>
         <textarea
           value={cozum}
           onChange={(e) => setCozum(e.target.value)}
@@ -156,7 +175,7 @@ export default function PersonelKayitFormu() {
           {kaydediliyor ? 'Gönderiliyor...' : 'Tamamla ve Gönder'}
         </button>
       </div>
-      {!gecerli && <p className="muted">Göndermek için: en az bir arıza türü seçin, tanım ve çözüm alanlarına en az {MIN_KARAKTER} karakter yazın.</p>}
+      {!gecerli && <p className="muted">Göndermek için: en az bir arıza türü seçin, tanım, direk sebep ve çözüm alanlarına en az {MIN_KARAKTER} karakter yazın.</p>}
     </div>
   );
 }

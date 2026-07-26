@@ -2,9 +2,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 
-type Kayit = { id: string; tamamlanma_durumu: string; personel: { ad_soyad: string } | null };
+type Kayit = { id: string; kategori: string; tamamlanma_durumu: string; personel: { ad_soyad: string } | null };
 type IsEmri = { id: string; durum: string; atanan: { ad_soyad: string } | null };
 type SiparisKalemi = { id: string; alindi: boolean };
+
+const KATEGORI_ADLARI: Record<string, string> = {
+  MA: 'Makine', BA: 'Montaj Banko', KA: 'Kalıp', RA: 'Robot', GT: 'Genel Tesis',
+};
 
 export default function AdminDashboard() {
   const [kayitlar, setKayitlar] = useState<Kayit[]>([]);
@@ -42,6 +46,19 @@ export default function AdminDashboard() {
     return { girdiler, maksimum: Math.max(1, ...girdiler.map(([, adet]) => adet)) };
   }, [kayitlar]);
 
+  const kategoriDagilimi = useMemo(() => {
+    const sayac: Record<string, number> = {};
+    kayitlar.forEach((k) => { sayac[k.kategori] = (sayac[k.kategori] || 0) + 1; });
+    const toplam = kayitlar.length;
+    return Object.entries(sayac)
+      .sort((a, b) => b[1] - a[1])
+      .map(([kategori, adet]) => ({
+        kategori, adet,
+        ad: KATEGORI_ADLARI[kategori] || kategori,
+        yuzde: toplam > 0 ? (adet / toplam) * 100 : 0,
+      }));
+  }, [kayitlar]);
+
   const isEmriGrafik = useMemo(() => {
     const sayac: Record<string, number> = {};
     isEmirleri.forEach((i) => {
@@ -67,6 +84,7 @@ export default function AdminDashboard() {
           <Link href="/admin/analiz"><button className="secondary">EWO Analiz / Pareto</button></Link>
           <Link href="/admin/bana-atananlar"><button className="secondary">Bana Atananlar</button></Link>
           <Link href="/admin/yeni-kayit"><button className="secondary">+ Yeni Kayıt</button></Link>
+          <Link href="/admin/makineler"><button className="secondary">Makine Yedek Parça</button></Link>
           <Link href="/admin/personel"><button className="secondary">Personel Yönetimi</button></Link>
         </div>
       </div>
@@ -84,7 +102,7 @@ export default function AdminDashboard() {
           <div className="row" style={{ marginBottom: 14, flexWrap: 'wrap' }}>
             <div className="card" style={{ flex: 1, minWidth: 130, textAlign: 'center', margin: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 700 }}>{kayitlar.length}</div>
-              <div className="muted">Toplam EWO Arıza Kaydı</div>
+              <div className="muted">Toplam Arıza Kaydı</div>
             </div>
             <div className="card" style={{ flex: 1, minWidth: 130, textAlign: 'center', margin: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 700 }} className="status-Beklemede">{acikIsEmri}</div>
@@ -97,6 +115,24 @@ export default function AdminDashboard() {
             <div className="card" style={{ flex: 1, minWidth: 130, textAlign: 'center', margin: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--danger)' }}>{bekleyenMalzeme}</div>
               <div className="muted">Bekleyen Malzeme</div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3>Kategori Dağılımı</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {kategoriDagilimi.length === 0 && <p className="muted">Henüz kayıt yok</p>}
+              {kategoriDagilimi.map((k) => (
+                <div key={k.kategori} className="row" style={{ gap: 10 }}>
+                  <div style={{ width: 140, fontSize: 13 }} className="muted">
+                    <span className={`badge badge-${k.kategori}`}>{k.kategori}</span> {k.ad}
+                  </div>
+                  <div style={{ flex: 1, background: 'var(--panel-2)', borderRadius: 6, overflow: 'hidden', height: 18 }}>
+                    <div style={{ width: `${k.yuzde}%`, background: 'var(--accent)', height: '100%' }} />
+                  </div>
+                  <div style={{ width: 90, textAlign: 'right', fontSize: 13 }}>{k.adet} (%{k.yuzde.toFixed(1)})</div>
+                </div>
+              ))}
             </div>
           </div>
 

@@ -5,9 +5,10 @@ import Link from 'next/link';
 
 type Kalem = {
   id: string; satir_metni: string; stok_kodu: string | null; miktar: string | null; teslim_tarihi: string | null;
-  alindi: boolean; alinma_tarihi: string | null;
+  alindi: boolean; alinma_tarihi: string | null; makine_id: string | null;
   alan: { ad_soyad: string } | null;
 };
+type Makine = { id: string; ad: string };
 
 function turkceTarihToDate(t: string | null): Date | null {
   if (!t) return null;
@@ -29,6 +30,7 @@ export default function SiparisDetayPage() {
   const id = params?.id as string;
   const [siparis, setSiparis] = useState<any>(null);
   const [kalemler, setKalemler] = useState<Kalem[]>([]);
+  const [makineler, setMakineler] = useState<Makine[]>([]);
   const [isleniyor, setIsleniyor] = useState<string | null>(null);
 
   async function getir() {
@@ -39,13 +41,28 @@ export default function SiparisDetayPage() {
     setKalemler(data.kalemler || []);
   }
 
-  useEffect(() => { getir(); }, [id]);
+  useEffect(() => {
+    getir();
+    fetch('/api/makineler').then((r) => r.json()).then((d) => setMakineler(d.makineler || []));
+  }, [id]);
 
   async function alindiIsaretle(kalemId: string, deger: boolean) {
     setIsleniyor(kalemId);
     try {
       await fetch(`/api/siparis-kalemi/${kalemId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alindi: deger }),
+      });
+      await getir();
+    } finally {
+      setIsleniyor(null);
+    }
+  }
+
+  async function makineAta(kalemId: string, makineId: string) {
+    setIsleniyor(kalemId);
+    try {
+      await fetch(`/api/siparis-kalemi/${kalemId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ makine_id: makineId || null }),
       });
       await getir();
     } finally {
@@ -74,7 +91,7 @@ export default function SiparisDetayPage() {
       <div className="card">
         <h3>Kalemler ({alinan}/{kalemler.length} alındı)</h3>
         <table>
-          <thead><tr><th>#</th><th>Stok Kodu</th><th>Açıklama</th><th>Miktar</th><th>Teslim Tarihi</th><th>Durum</th><th>Alan</th><th>Tarih/Saat</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>Stok Kodu</th><th>Açıklama</th><th>Miktar</th><th>Teslim Tarihi</th><th>Makine</th><th>Durum</th><th>Alan</th><th>Tarih/Saat</th><th></th></tr></thead>
           <tbody>
             {kalemler.map((k, i) => {
               const gecikmis = gecikmisMi(k.teslim_tarihi, k.alindi);
@@ -87,6 +104,12 @@ export default function SiparisDetayPage() {
                   <td>{k.miktar || '-'}</td>
                   <td style={{ color: gecikmis ? 'var(--danger)' : undefined, fontWeight: gecikmis ? 700 : undefined }}>
                     {k.teslim_tarihi || '-'} {gecikmis ? '(GECİKMİŞ)' : ''}
+                  </td>
+                  <td>
+                    <select value={k.makine_id || ''} onChange={(e) => makineAta(k.id, e.target.value)} disabled={isleniyor === k.id}>
+                      <option value="">-</option>
+                      {makineler.map((m) => <option key={m.id} value={m.id}>{m.ad}</option>)}
+                    </select>
                   </td>
                   <td className={k.alindi ? 'status-Tamamlandı' : 'status-Beklemede'}>{k.alindi ? 'Alındı' : 'Bekliyor'}</td>
                   <td>{k.alan?.ad_soyad || '-'}</td>
@@ -121,6 +144,12 @@ export default function SiparisDetayPage() {
                 )}
                 <div className={k.alindi ? 'status-Tamamlandı' : 'status-Beklemede'}>{k.alindi ? 'Alındı' : 'Bekliyor'}</div>
                 {k.alindi && <div className="muted">{k.alan?.ad_soyad} · {k.alinma_tarihi ? new Date(k.alinma_tarihi).toLocaleString('tr-TR') : ''}</div>}
+                <label className="muted" style={{ display: 'block', marginTop: 6 }}>Makine
+                  <select value={k.makine_id || ''} onChange={(e) => makineAta(k.id, e.target.value)} disabled={isleniyor === k.id} style={{ width: '100%', marginTop: 4 }}>
+                    <option value="">-</option>
+                    {makineler.map((m) => <option key={m.id} value={m.id}>{m.ad}</option>)}
+                  </select>
+                </label>
                 {k.alindi ? (
                   <button className="secondary" style={{ marginTop: 8 }} onClick={() => alindiIsaretle(k.id, false)} disabled={isleniyor === k.id}>Geri Al</button>
                 ) : (
