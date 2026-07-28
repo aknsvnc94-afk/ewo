@@ -13,7 +13,8 @@ export type GecmisKayit = {
   kalip_kodu: string;
   kalip_kodu_normalize: string;
   ay: string; // 'YYYY-MM'
-  yt_baski: number;
+  yt_baski: number;             // o ay gerçekleşen baskı sayısı (dosyada doğrudan verilmiş)
+  guncel_baski_toplam: number;  // o ay itibarıyla ERP'nin kümülatif değeri (dosyada doğrudan verilmiş)
   ariza_sayisi_manuel: number;
 };
 
@@ -45,7 +46,8 @@ export function parseGecmisKpiBuffer(
     let buKalipDoluAySayisi = 0;
     AY_ISIMLERI.forEach((_, ayIndex) => {
       const base = OCAK_BASLANGIC + ayIndex * BLOK_GENISLIGI;
-      const ayGerceklesen = row[base + 1]; // [base]=güncel, [base+1]=ay gerçekleşen, [base+2]=arıza, [base+3]=msbf
+      const guncelToplam = row[base];      // [base]=güncel (kümülatif)
+      const ayGerceklesen = row[base + 1]; // [base+1]=ay gerçekleşen, [base+2]=arıza, [base+3]=msbf
       const arizaSayisi = row[base + 2];
       if (ayGerceklesen === null && arizaSayisi === null) return; // bu ay için hiç veri yok, atla
 
@@ -55,6 +57,7 @@ export function parseGecmisKpiBuffer(
         kalip_kodu_normalize: norm,
         ay: `${yil}-${String(ayNo).padStart(2, '0')}`,
         yt_baski: typeof ayGerceklesen === 'number' ? ayGerceklesen : Number(ayGerceklesen) || 0,
+        guncel_baski_toplam: typeof guncelToplam === 'number' ? guncelToplam : Number(guncelToplam) || 0,
         ariza_sayisi_manuel: typeof arizaSayisi === 'number' ? arizaSayisi : Number(arizaSayisi) || 0,
       });
       buKalipDoluAySayisi++;

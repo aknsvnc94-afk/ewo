@@ -18,8 +18,12 @@ function normalizeBaslik(text: any): string {
     .replace(/[_\s]+/g, ' ').trim();
 }
 
-export type BaskiKaydi = { kalip_kodu: string; kalip_kodu_normalize: string; yt_baski: number };
+export type BaskiKaydi = { kalip_kodu: string; kalip_kodu_normalize: string; guncel_baski_toplam: number };
 
+// NOT: ERP'den her ay okunan "YT_Baskı" değeri, o kalıbın KÜMÜLATİF
+// (o ana kadarki toplam) baskı sayısıdır — o ayın kendi baskı sayısı değildir.
+// O ayki gerçek baskı sayısı, sunucu tarafında bir önceki ayın kümülatif
+// değeri bu değerden çıkarılarak (fark alınarak) hesaplanır.
 export function parseBaskiBuffer(buf: ArrayBuffer): { kayitlar: BaskiKaydi[]; toplamSatir: number; hata?: string } {
   const wb = XLSX.read(buf, { type: 'array', cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -54,7 +58,7 @@ export function parseBaskiBuffer(buf: ArrayBuffer): { kayitlar: BaskiKaydi[]; to
       return {
         kalip_kodu: kod ? String(kod).trim() : '',
         kalip_kodu_normalize: kalipKoduNormalize(kod),
-        yt_baski: typeof baski === 'number' ? baski : Number(baski) || 0,
+        guncel_baski_toplam: typeof baski === 'number' ? baski : Number(baski) || 0,
       };
     })
     .filter((k) => k.kalip_kodu_normalize.length > 0);

@@ -9,7 +9,7 @@ type Kayit = {
   tamamlanma_durumu: string; kalip_kodu: string | null;
 };
 
-type BaskiKaydi = { kalip_kodu: string; kalip_kodu_normalize: string; ay: string; yt_baski: number; ariza_sayisi_manuel: number | null };
+type BaskiKaydi = { kalip_kodu: string; kalip_kodu_normalize: string; ay: string; yt_baski: number | null; guncel_baski_toplam: number; ariza_sayisi_manuel: number | null };
 
 type Sekme = 'mttr' | 'mtbf' | 'msbf' | 'duruslar';
 
@@ -43,21 +43,28 @@ export default function PerformansPage() {
   const [tezgahFiltre, setTezgahFiltre] = useState('');
 
   const [msbfAy, setMsbfAy] = useState(buAyYYYYMM());
-  const [kumulatifVeri, setKumulatifVeri] = useState<BaskiKaydi[]>([]); // seçilen aya kadarki TÜM aylar
+  const [ayVerisi, setAyVerisi] = useState<BaskiKaydi[]>([]); // sadece seçilen ayın kayıtları
+  const [tumVeri, setTumVeri] = useState<BaskiKaydi[]>([]); // kümülatif (ömür boyu) özet için — seçilen aya kadarki tüm kayıtlar
   const [baskiYukleniyor, setBaskiYukleniyor] = useState(false);
   const [baskiMesaj, setBaskiMesaj] = useState('');
 
   const [gecmisYil, setGecmisYil] = useState(new Date().getFullYear());
   const [gecmisYukleniyor, setGecmisYukleniyor] = useState(false);
   const [gecmisMesaj, setGecmisMesaj] = useState('');
+  const [temizleniyor, setTemizleniyor] = useState(false);
 
-  async function kumulatifVeriGetir(ay: string) {
-    const res = await fetch(`/api/kalip-baski?ayaKadar=${ay}`);
-    const data = await res.json();
-    setKumulatifVeri(data.kayitlar || []);
+  async function verileriGetir(ay: string) {
+    const [ayRes, tumRes] = await Promise.all([
+      fetch(`/api/kalip-baski?ay=${ay}`),
+      fetch(`/api/kalip-baski?ayaKadar=${ay}`),
+    ]);
+    const ayData = await ayRes.json();
+    const tumData = await tumRes.json();
+    setAyVerisi(ayData.kayitlar || []);
+    setTumVeri(tumData.kayitlar || []);
   }
 
-  useEffect(() => { kumulatifVeriGetir(msbfAy); }, [msbfAy]);
+  useEffect(() => { verileriGetir(msbfAy); }, [msbfAy]);
 
   async function baskiDosyaYukle(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -72,15 +79,15 @@ export default function PerformansPage() {
         setBaskiMesaj(`Toplam ${toplamSatir} satır tarandı, geçerli kalıp kodu bulunamadı.`);
         return;
       }
-      setBaskiMesaj(`${kayitlar.length} kalıp bulundu, gönderiliyor...`);
+      setBaskiMesaj(`${kayitlar.length} kalıp bulundu, ${msbfAy} öncesiyle karşılaştırılıp gönderiliyor...`);
       const res = await fetch('/api/kalip-baski', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kayitlar, ay: msbfAy }),
+        body: JSON.stringify({ kayitlar, ay: msbfAy, hesaplaDelta: true }),
       });
       const data = await res.json();
       if (!res.ok) { setBaskiMesaj(`Hata: ${data.error}`); return; }
-      setBaskiMesaj(`✓ ${data.islenen} kalıbın ${msbfAy} ayı baskı sayısı kaydedildi`);
-      kumulatifVeriGetir(msbfAy);
+      setBaskiMesaj(`✓ ${data.islenen} kalıbın ${msbfAy} ayı verisi kaydedildi (o ayki baskı, bir önceki ayın kümülatif değeriyle farkı alınarak hesaplandı)`);
+      verileriGetir(msbfAy);
     } catch (err: any) {
       setBaskiMesaj(`Hata: Dosya okunamadı (${err?.message || 'bilinmeyen hata'})`);
     } finally {
@@ -101,12 +108,12 @@ export default function PerformansPage() {
       setGecmisMesaj(`${kalipSayisi} kalıba ait ${kayitlar.length} aylık kayıt bulundu, gönderiliyor...`);
       const res = await fetch('/api/kalip-baski', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kayitlar }),
+        body: JSON.stringify({ kayitlar, hesaplaDelta: false }),
       });
       const data = await res.json();
       if (!res.ok) { setGecmisMesaj(`Hata: ${data.error}`); return; }
       setGecmisMesaj(`✓ ${kalipSayisi} kalıbın geçmiş ay verileri (${data.islenen} kayıt) içe aktarıldı`);
-      kumulatifVeriGetir(msbfAy);
+      verileriGetir(msbfAy);
     } catch (err: any) {
       setGecmisMesaj(`Hata: Dosya okunamadı (${err?.message || 'bilinmeyen hata'})`);
     } finally {
@@ -115,72 +122,122 @@ export default function PerformansPage() {
     }
   }
 
-  // Seçilen aya kadar KA (kalıp arızası) kayıtlarını kalıp koduna göre kümülatif say
-  const canliArizaSayaci = useMemo(() => {
+  async function tumVerileriTemizle() {
+    if (!confirm('Tüm kalıp baskı sayısı verilerini kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
+    setTemizleniyor(true);
+    try {
+      const res = await fetch('/api/kalip-baski', { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) { setBaskiMesaj(`Hata: ${data.error}`); return; }
+      setBaskiMesaj(`✓ ${data.silinen} kayıt silindi`);
+      verileriGetir(msbfAy);
+    } finally {
+      setTemizleniyor(false);
+    }
+  }
+
+  // Seçilen ayın TAM İÇİNDE (o ay başı - o ay sonu) oluşan KA arızalarını kalıp koduna göre say
+  const buAyArizaSayaci = useMemo(() => {
     const [yil, ayNo] = msbfAy.split('-').map(Number);
-    const ayinSonu = new Date(yil, ayNo, 0, 23, 59, 59);
     const sayac: Record<string, number> = {};
     kayitlar.forEach((k) => {
       if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic) return;
       const t = new Date(k.baslangic);
-      if (t > ayinSonu) return; // seçilen aydan sonrasını sayma
+      if (t.getFullYear() !== yil || t.getMonth() + 1 !== ayNo) return;
       const norm = kalipKoduNormalize(k.kalip_kodu);
       sayac[norm] = (sayac[norm] || 0) + 1;
     });
     return sayac;
   }, [kayitlar, msbfAy]);
 
-  // Kümülatif MSBF: kalıp bazında, seçilen aya kadarki TÜM aylardaki baskı ve arıza toplamı
-  const msbfSonuclari = useMemo(() => {
-    const kalipMap: Record<string, { kalip_kodu: string; toplamBaski: number; manuelArizaVarMi: boolean; toplamManuelAriza: number }> = {};
-    kumulatifVeri.forEach((b) => {
-      if (!kalipMap[b.kalip_kodu_normalize]) {
-        kalipMap[b.kalip_kodu_normalize] = { kalip_kodu: b.kalip_kodu, toplamBaski: 0, manuelArizaVarMi: false, toplamManuelAriza: 0 };
-      }
-      const girdi = kalipMap[b.kalip_kodu_normalize];
-      girdi.toplamBaski += b.yt_baski || 0;
-      if (b.ariza_sayisi_manuel !== null && b.ariza_sayisi_manuel !== undefined) {
-        girdi.manuelArizaVarMi = true;
-        girdi.toplamManuelAriza += b.ariza_sayisi_manuel;
-      }
+  // Seçilen AYA KADAR (ömür boyu) oluşan KA arızalarını kalıp koduna göre kümülatif say
+  const kumulatifArizaSayaci = useMemo(() => {
+    const [yil, ayNo] = msbfAy.split('-').map(Number);
+    const ayinSonu = new Date(yil, ayNo, 0, 23, 59, 59);
+    const sayac: Record<string, number> = {};
+    kayitlar.forEach((k) => {
+      if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic) return;
+      const t = new Date(k.baslangic);
+      if (t > ayinSonu) return;
+      const norm = kalipKoduNormalize(k.kalip_kodu);
+      sayac[norm] = (sayac[norm] || 0) + 1;
     });
+    return sayac;
+  }, [kayitlar, msbfAy]);
 
-    return Object.entries(kalipMap)
-      .map(([norm, g]) => {
-        // Manuel (geçmiş ay içe aktarımı) veri varsa onu kullan, yoksa EWO'dan canlı hesapla
-        const arizaSayisi = g.manuelArizaVarMi ? g.toplamManuelAriza : (canliArizaSayaci[norm] || 0);
-        const msbf = arizaSayisi > 0 ? g.toplamBaski / arizaSayisi : null;
-        return { kalip_kodu: g.kalip_kodu, kalip_kodu_normalize: norm, toplamBaski: g.toplamBaski, arizaSayisi, msbf, kaynak: g.manuelArizaVarMi ? 'İçe Aktarılan' : 'EWO (Canlı)' };
+  // AYLIK tablo: seçilen ayın kendi verileri (Güncel Baskı / O Ay Baskı / Arıza / MSBF)
+  const msbfAylikSonuclar = useMemo(() => {
+    return ayVerisi
+      .map((b) => {
+        const arizaSayisi = b.ariza_sayisi_manuel ?? (buAyArizaSayaci[b.kalip_kodu_normalize] || 0);
+        const ayBaskisi = b.yt_baski; // null olabilir (ilk yüklenen ay, önceki veri yoksa)
+        const msbf = ayBaskisi !== null && arizaSayisi > 0 ? ayBaskisi / arizaSayisi : null;
+        return {
+          kalip_kodu: b.kalip_kodu, kalip_kodu_normalize: b.kalip_kodu_normalize,
+          guncelToplam: b.guncel_baski_toplam, ayBaskisi, arizaSayisi, msbf,
+          kaynak: b.ariza_sayisi_manuel !== null && b.ariza_sayisi_manuel !== undefined ? 'İçe Aktarılan' : 'EWO (Canlı)',
+        };
       })
       .sort((a, b) => {
         if (a.msbf === null) return 1;
         if (b.msbf === null) return -1;
         return a.msbf - b.msbf;
       });
-  }, [kumulatifVeri, canliArizaSayaci]);
+  }, [ayVerisi, buAyArizaSayaci]);
+
+  // KÜMÜLATİF (ömür boyu) özet: her kalıp için EN SON güncel (kümülatif) baskı değeri
+  // (zaten kümülatif olduğu için toplanmaz, en güncel kayıt alınır) / o ana kadarki toplam arıza
+  const msbfKumulatifSonuclar = useMemo(() => {
+    const enSonMap: Record<string, BaskiKaydi> = {};
+    [...tumVeri].sort((a, b) => a.ay.localeCompare(b.ay)).forEach((b) => {
+      enSonMap[b.kalip_kodu_normalize] = b; // en son (en büyük ay) kayıt kalır
+    });
+    const manuelToplamMap: Record<string, number> = {};
+    let herhangiManuelVarMi: Record<string, boolean> = {};
+    tumVeri.forEach((b) => {
+      if (b.ariza_sayisi_manuel !== null && b.ariza_sayisi_manuel !== undefined) {
+        manuelToplamMap[b.kalip_kodu_normalize] = (manuelToplamMap[b.kalip_kodu_normalize] || 0) + b.ariza_sayisi_manuel;
+        herhangiManuelVarMi[b.kalip_kodu_normalize] = true;
+      }
+    });
+
+    return Object.entries(enSonMap)
+      .map(([norm, b]) => {
+        const arizaSayisi = herhangiManuelVarMi[norm] ? manuelToplamMap[norm] : (kumulatifArizaSayaci[norm] || 0);
+        const msbf = arizaSayisi > 0 ? b.guncel_baski_toplam / arizaSayisi : null;
+        return { kalip_kodu: b.kalip_kodu, kalip_kodu_normalize: norm, guncelToplam: b.guncel_baski_toplam, arizaSayisi, msbf };
+      })
+      .sort((a, b) => {
+        if (a.msbf === null) return 1;
+        if (b.msbf === null) return -1;
+        return a.msbf - b.msbf;
+      });
+  }, [tumVeri, kumulatifArizaSayaci]);
 
   const genelOrtalamaMsbf = useMemo(() => {
-    const toplamBaski = msbfSonuclari.reduce((t, s) => t + s.toplamBaski, 0);
-    const toplamAriza = msbfSonuclari.reduce((t, s) => t + s.arizaSayisi, 0);
+    const gecerli = msbfKumulatifSonuclar.filter((s) => s.msbf !== null);
+    const toplamBaski = gecerli.reduce((t, s) => t + s.guncelToplam, 0);
+    const toplamAriza = gecerli.reduce((t, s) => t + s.arizaSayisi, 0);
     return toplamAriza > 0 ? toplamBaski / toplamAriza : null;
-  }, [msbfSonuclari]);
+  }, [msbfKumulatifSonuclar]);
 
   const fomMarOrtalamaMsbf = useMemo(() => {
-    const fomMar = msbfSonuclari.filter((s) => s.kalip_kodu_normalize.startsWith('FOM') || s.kalip_kodu_normalize.startsWith('MAR'));
-    const toplamBaski = fomMar.reduce((t, s) => t + s.toplamBaski, 0);
-    const toplamAriza = fomMar.reduce((t, s) => t + s.arizaSayisi, 0);
+    const fomMar = msbfKumulatifSonuclar.filter((s) => s.kalip_kodu_normalize.startsWith('FOM') || s.kalip_kodu_normalize.startsWith('MAR'));
+    const gecerli = fomMar.filter((s) => s.msbf !== null);
+    const toplamBaski = gecerli.reduce((t, s) => t + s.guncelToplam, 0);
+    const toplamAriza = gecerli.reduce((t, s) => t + s.arizaSayisi, 0);
     return { adet: fomMar.length, msbf: toplamAriza > 0 ? toplamBaski / toplamAriza : null };
-  }, [msbfSonuclari]);
+  }, [msbfKumulatifSonuclar]);
 
-  // Teşhis: bu ay KA arızası olan ama baskı verisi yüklenmemiş kalıp kodları
+  // Teşhis: bu ay KA arızası olan ama baskı verisi hiç yüklenmemiş kalıp kodları
   const eslesmeyenKalipKodlari = useMemo(() => {
-    const yuklenenSet = new Set(kumulatifVeri.map((b) => b.kalip_kodu_normalize));
+    const yuklenenSet = new Set(tumVeri.map((b) => b.kalip_kodu_normalize));
     const eksikler = new Set<string>();
-    Object.keys(canliArizaSayaci).forEach((norm) => {
+    Object.keys(kumulatifArizaSayaci).forEach((norm) => {
       if (!yuklenenSet.has(norm)) eksikler.add(norm);
     });
     return Array.from(eksikler);
-  }, [kumulatifVeri, canliArizaSayaci]);
+  }, [tumVeri, kumulatifArizaSayaci]);
 
   useEffect(() => {
     fetch('/api/records').then((r) => r.json()).then((data) => {
@@ -301,8 +358,17 @@ export default function PerformansPage() {
       {sekme === 'msbf' ? (
         <>
           <div className="card">
-            <h3>Kalıp Baskı Sayısı Excel Yükle (Aylık)</h3>
-            <p className="muted">Kalıp Kodu ve YT_Baskı sütunlarını içeren ERP export dosyasını, ilgili ayı seçip yükleyin.</p>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <h3>Kalıp Baskı Sayısı Excel Yükle (Aylık)</h3>
+              <button className="danger" onClick={tumVerileriTemizle} disabled={temizleniyor}>
+                {temizleniyor ? 'Siliniyor...' : 'Tüm Baskı Verilerini Temizle'}
+              </button>
+            </div>
+            <p className="muted">
+              Kalıp Kodu ve YT_Baskı (ERP'nin verdiği <strong>kümülatif</strong> değer) sütunlarını içeren dosyayı,
+              ilgili ayı seçip yükleyin. O ayki gerçek baskı sayısı, bir önceki yüklü ayın kümülatif değeriyle
+              farkı alınarak otomatik hesaplanır.
+            </p>
             <div className="row" style={{ flexWrap: 'wrap' }}>
               <label className="muted">Ay
                 <input type="month" value={msbfAy} onChange={(e) => setMsbfAy(e.target.value)} style={{ display: 'block', marginTop: 4 }} />
@@ -318,7 +384,7 @@ export default function PerformansPage() {
             <h3>Geçmiş Ay Verilerini Toplu İçe Aktar</h3>
             <p className="muted">
               İlk KPI dosyanız gibi aylık blok yapılı bir Excel'den, sadece Fompak (FOM) ve Martur (MAR) kalıplarının
-              dolu olan aylarını (baskı sayısı + arıza sayısı) toplu olarak içe aktarır.
+              dolu olan aylarını (o ay gerçekleşen baskı, güncel kümülatif baskı ve arıza sayısı) toplu olarak içe aktarır.
             </p>
             <div className="row" style={{ flexWrap: 'wrap' }}>
               <label className="muted">Yıl
@@ -331,26 +397,18 @@ export default function PerformansPage() {
             {gecmisMesaj && <p style={{ marginTop: 10 }}>{gecmisMesaj}</p>}
           </div>
 
-          <div className="card" style={{ borderColor: 'var(--border)' }}>
-            <p className="muted" style={{ margin: 0 }}>
-              ⓘ MSBF = Toplam Baskı Sayısı / Toplam Arıza Sayısı — <strong>kümülatif</strong> olarak, ilk yüklenen aydan
-              seçilen aya kadar tüm ayların toplamı üzerinden hesaplanır. Geçmiş ay içe aktarımı yapılan kalıplarda
-              arıza sayısı dosyadaki sabit değerden, diğerlerinde EWO sistemindeki KA kayıtlarından canlı alınır.
-            </p>
-          </div>
-
           <div className="row" style={{ marginBottom: 14, flexWrap: 'wrap' }}>
             <div className="card" style={{ flex: 1, minWidth: 180, textAlign: 'center', margin: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 700 }}>
                 {genelOrtalamaMsbf !== null ? Math.round(genelOrtalamaMsbf).toLocaleString('tr-TR') : '-'}
               </div>
-              <div className="muted">Genel Ortalama MSBF ({msbfSonuclari.length} kalıp, {msbfAy} itibarıyla kümülatif)</div>
+              <div className="muted">Ömür Boyu Genel Ortalama MSBF ({msbfKumulatifSonuclar.length} kalıp, {msbfAy} itibarıyla)</div>
             </div>
             <div className="card" style={{ flex: 1, minWidth: 180, textAlign: 'center', margin: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 700 }}>
                 {fomMarOrtalamaMsbf.msbf !== null ? Math.round(fomMarOrtalamaMsbf.msbf).toLocaleString('tr-TR') : '-'}
               </div>
-              <div className="muted">Fompak + Martur Genel MSBF ({fomMarOrtalamaMsbf.adet} kalıp)</div>
+              <div className="muted">Fompak + Martur Ömür Boyu Genel MSBF ({fomMarOrtalamaMsbf.adet} kalıp)</div>
             </div>
           </div>
 
@@ -358,31 +416,58 @@ export default function PerformansPage() {
             <div className="card" style={{ borderColor: 'var(--warn)' }}>
               <h3 className="status-Devam">⚠ Baskı Sayısı Yüklenmemiş Kalıplar</h3>
               <p className="muted">
-                Bu kalıplarda EWO'da KA arızası kaydı var ama baskı sayısı henüz yüklenmediği için MSBF hesaplanamıyor
-                (bu, daha önce "arızalar gözükmüyor" sorununun teşhisi içindir — kalıp kodu formatı eşleşmiyorsa da burada görünür):
+                Bu kalıplarda EWO'da KA arızası kaydı var ama baskı sayısı henüz yüklenmediği için MSBF hesaplanamıyor:
               </p>
               <p style={{ fontFamily: 'monospace', fontSize: 13 }}>{eslesmeyenKalipKodlari.join(', ')}</p>
             </div>
           )}
 
           <div className="card">
-            <h3>{msbfAy} İtibarıyla Kümülatif — Kalıp Bazında MSBF (En Düşük → En Yüksek)</h3>
-            <p className="muted">Düşük MSBF, o kalıbın daha az baskıda bir arıza yaptığını, yani daha sorunlu olduğunu gösterir.</p>
-            {msbfSonuclari.length === 0 ? (
-              <p className="muted">Henüz baskı sayısı yüklenmedi.</p>
+            <h3>{msbfAy} — Kalıp Bazında Aylık MSBF (En Düşük → En Yüksek)</h3>
+            <p className="muted">
+              Bu, orijinal KPI dosyanızdaki aylık sütun yapısının birebir karşılığıdır: Güncel Baskı Sayısı (ERP'den,
+              kümülatif) → O Ay Baskı Sayısı (fark) → Arıza Sayısı → MSBF.
+            </p>
+            {msbfAylikSonuclar.length === 0 ? (
+              <p className="muted">{msbfAy} için henüz baskı sayısı yüklenmedi.</p>
             ) : (
               <table>
-                <thead><tr><th>Kalıp Kodu</th><th>Toplam Baskı</th><th>Toplam Arıza</th><th>MSBF</th><th>Kaynak</th></tr></thead>
+                <thead><tr><th>Kalıp Kodu</th><th>Güncel Baskı Sayısı (ERP)</th><th>{msbfAy} Ayı Baskı Sayısı</th><th>Arıza Sayısı</th><th>MSBF</th><th>Kaynak</th></tr></thead>
                 <tbody>
-                  {msbfSonuclari.map((s) => (
+                  {msbfAylikSonuclar.map((s) => (
                     <tr key={s.kalip_kodu_normalize}>
                       <td>{s.kalip_kodu}</td>
-                      <td>{s.toplamBaski.toLocaleString('tr-TR')}</td>
+                      <td>{s.guncelToplam.toLocaleString('tr-TR')}</td>
+                      <td>{s.ayBaskisi !== null ? s.ayBaskisi.toLocaleString('tr-TR') : <span className="muted">İlk ay, veri yok</span>}</td>
                       <td>{s.arizaSayisi}</td>
                       <td className={s.arizaSayisi > 0 ? '' : 'muted'}>
                         {s.msbf !== null ? Math.round(s.msbf).toLocaleString('tr-TR') : 'Arıza yok'}
                       </td>
                       <td className="muted" style={{ fontSize: 12 }}>{s.kaynak}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="card">
+            <h3>Ömür Boyu Kümülatif MSBF ({msbfAy} itibarıyla) — Kalıp Bazında</h3>
+            <p className="muted">Kalıbın üretime girdiğinden bu yana toplam baskı sayısı / toplam arıza sayısı.</p>
+            {msbfKumulatifSonuclar.length === 0 ? (
+              <p className="muted">Henüz baskı sayısı yüklenmedi.</p>
+            ) : (
+              <table>
+                <thead><tr><th>Kalıp Kodu</th><th>Ömür Boyu Toplam Baskı</th><th>Ömür Boyu Toplam Arıza</th><th>Kümülatif MSBF</th></tr></thead>
+                <tbody>
+                  {msbfKumulatifSonuclar.map((s) => (
+                    <tr key={s.kalip_kodu_normalize}>
+                      <td>{s.kalip_kodu}</td>
+                      <td>{s.guncelToplam.toLocaleString('tr-TR')}</td>
+                      <td>{s.arizaSayisi}</td>
+                      <td className={s.arizaSayisi > 0 ? '' : 'muted'}>
+                        {s.msbf !== null ? Math.round(s.msbf).toLocaleString('tr-TR') : 'Arıza yok'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
