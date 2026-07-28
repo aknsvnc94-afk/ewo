@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { parseBaskiBuffer, kalipKoduNormalize } from '@/lib/kalipBaskiParse';
+import { parseBaskiBuffer, kalipKoduNormalize, kalipKoduKismiCikar } from '@/lib/kalipBaskiParse';
 import { parseGecmisKpiBuffer } from '@/lib/kalipKpiGecmisParse';
 
 type Kayit = {
@@ -144,7 +144,7 @@ export default function PerformansPage() {
       if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic) return;
       const t = new Date(k.baslangic);
       if (t.getFullYear() !== yil || t.getMonth() + 1 !== ayNo) return;
-      const norm = kalipKoduNormalize(k.kalip_kodu);
+      const norm = kalipKoduNormalize(kalipKoduKismiCikar(k.kalip_kodu));
       sayac[norm] = (sayac[norm] || 0) + 1;
     });
     return sayac;
@@ -159,7 +159,7 @@ export default function PerformansPage() {
       if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic) return;
       const t = new Date(k.baslangic);
       if (t > ayinSonu) return;
-      const norm = kalipKoduNormalize(k.kalip_kodu);
+      const norm = kalipKoduNormalize(kalipKoduKismiCikar(k.kalip_kodu));
       sayac[norm] = (sayac[norm] || 0) + 1;
     });
     return sayac;
@@ -172,7 +172,7 @@ export default function PerformansPage() {
     const gruplar: Record<string, { ham: string; adet: number }> = {};
     kayitlar.forEach((k) => {
       if (k.kategori !== 'KA' || !k.kalip_kodu) return;
-      const norm = kalipKoduNormalize(k.kalip_kodu);
+      const norm = kalipKoduNormalize(kalipKoduKismiCikar(k.kalip_kodu));
       if (!gruplar[norm]) gruplar[norm] = { ham: k.kalip_kodu, adet: 0 };
       gruplar[norm].adet += 1;
     });

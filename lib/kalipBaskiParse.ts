@@ -7,6 +7,13 @@ export function kalipKoduNormalize(kod: string | null | undefined): string {
   return (kod ?? '').toString().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+// EWO Arıza Kayıtları'ndaki kalıp kodu alanı bazen "KOD / AÇIKLAMA" formatında
+// saklanıyor (örn. "FOM-047 / RN2 SİP. SHELL KİTİ X52-SPR"). Eşleştirme için
+// sadece " / " işaretinden ÖNCEKİ asıl kodu almamız gerekiyor.
+export function kalipKoduKismiCikar(ham: string | null | undefined): string {
+  return (ham ?? '').toString().split('/')[0].trim();
+}
+
 const BASLIK_ADAYLARI: Record<string, string[]> = {
   kalip_kodu: ['KALIP KODU', 'KALIPKODU'],
   yt_baski: ['YT_BASKI', 'YT BASKI', 'YTBASKI'],
