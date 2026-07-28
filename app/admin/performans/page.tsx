@@ -165,6 +165,21 @@ export default function PerformansPage() {
     return sayac;
   }, [kayitlar, msbfAy]);
 
+  // TEŞHİS: EWO'daki TÜM KA (kalıp arızası) kayıtlarının HAM kalıp kodu değerleri
+  // (normalize edilmeden) — sistemde gerçekten ne yazdığını görmek için
+  const hamKalipKoduListesi = useMemo(() => {
+    const liste: { ham: string; normalize: string; adet: number }[] = [];
+    const gruplar: Record<string, { ham: string; adet: number }> = {};
+    kayitlar.forEach((k) => {
+      if (k.kategori !== 'KA' || !k.kalip_kodu) return;
+      const norm = kalipKoduNormalize(k.kalip_kodu);
+      if (!gruplar[norm]) gruplar[norm] = { ham: k.kalip_kodu, adet: 0 };
+      gruplar[norm].adet += 1;
+    });
+    Object.entries(gruplar).forEach(([norm, g]) => liste.push({ ham: g.ham, normalize: norm, adet: g.adet }));
+    return liste.sort((a, b) => b.adet - a.adet);
+  }, [kayitlar]);
+
   // AYLIK: seçilen ayın kendi verileri (o ay baskı / o ay arıza / o ayki MSBF)
   const msbfAylikSonuclar = useMemo(() => {
     const map: Record<string, { ayBaskisi: number | null; ayArizaSayisi: number; ayMsbf: number | null; kaynak: string }> = {};
@@ -415,6 +430,34 @@ export default function PerformansPage() {
               <p style={{ fontFamily: 'monospace', fontSize: 13 }}>{eslesmeyenKalipKodlari.join(', ')}</p>
             </div>
           )}
+
+          <div className="card">
+            <h3>🔍 Teşhis: EWO'daki KA Arızalarının Kalıp Kodları (Ham Veri)</h3>
+            <p className="muted">
+              Bu liste, EWO Arıza Kayıtları'ndaki (kategori=KA) kalıp kodu alanının <strong>tam olarak ne yazdığını</strong>
+              gösterir — baskı sayısı Excel'indeki kodlarla (örn. FOM001, FOM-008) karşılaştırıp format farkı olup
+              olmadığını görebilirsiniz. Toplam {hamKalipKoduListesi.length} farklı kalıp kodu, tüm zamanlar.
+            </p>
+            {hamKalipKoduListesi.length === 0 ? (
+              <p className="muted" style={{ color: 'var(--danger)' }}>
+                EWO'da hiç KA (Kalıp Arızası) kaydı bulunamadı — ya hiç arıza yüklenmemiş ya da hiçbirinde kalıp kodu alanı dolu değil.
+              </p>
+            ) : (
+              <table>
+                <thead><tr><th>Ham Kalıp Kodu (EWO'daki hali)</th><th>Normalize Edilmiş Hali</th><th>Arıza Sayısı</th></tr></thead>
+                <tbody>
+                  {hamKalipKoduListesi.slice(0, 50).map((h) => (
+                    <tr key={h.normalize}>
+                      <td style={{ fontFamily: 'monospace' }}>{h.ham}</td>
+                      <td style={{ fontFamily: 'monospace' }} className="muted">{h.normalize}</td>
+                      <td>{h.adet}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {hamKalipKoduListesi.length > 50 && <p className="muted">...ve {hamKalipKoduListesi.length - 50} tane daha (sadece ilk 50 gösteriliyor)</p>}
+          </div>
 
           <div className="card">
             <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
