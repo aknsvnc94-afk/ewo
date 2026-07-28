@@ -32,6 +32,13 @@ fabrikasını seçer. Ayrıca tüm fabrikalardaki personeli yönetebilen bir
    - `supabase/schema_v8_is_emirleri.sql`
    - `supabase/schema_v9_giris_guvenligi.sql`
    - `supabase/schema_v10_fabrikalar.sql` (çoklu fabrika desteği — mevcut tüm
+   - `supabase/schema_v11_gelistirmeler.sql`
+   - `supabase/schema_v12_makine_kodu_esleme.sql`
+   - `supabase/schema_v13_silme_izinleri.sql`
+   - `supabase/schema_v14_kalip_baski.sql` (MSBF için kalıp baskı sayısı tablosu)
+   - `supabase/schema_v15_msbf_gelistirmeler.sql`
+   - `supabase/schema_v16_kumulatif_duzeltme.sql`
+   - `supabase/schema_v17_yt_baski_nullable.sql`
      veri geriye dönük olarak "Plaskar" fabrikasına atanır)
 3. İlk fabrikanı (Plaskar zaten `schema_v10` ile otomatik oluşuyor) veya yeni bir
    fabrika daha eklemek istersen:

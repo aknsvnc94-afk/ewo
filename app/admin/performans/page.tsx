@@ -236,11 +236,13 @@ export default function PerformansPage() {
     return { adet: fomMar.length, msbf: toplamAriza > 0 ? toplamBaski / toplamAriza : null };
   }, [msbfBirlesikSonuclar]);
 
-  // Teşhis: bu ay KA arızası olan ama baskı verisi hiç yüklenmemiş kalıp kodları
+  // Teşhis: bu ay KA arızası olan ama baskı verisi hiç yüklenmemiş Fompak/Martur kalıp kodları
+  // (sadece FOM/MAR gösteriliyor çünkü bu özellik yalnızca bu iki müşteri için kapsamlı)
   const eslesmeyenKalipKodlari = useMemo(() => {
     const yuklenenSet = new Set(tumVeri.map((b) => b.kalip_kodu_normalize));
     const eksikler = new Set<string>();
     Object.keys(kumulatifArizaSayaci).forEach((norm) => {
+      if (!(norm.startsWith('FOM') || norm.startsWith('MAR'))) return;
       if (!yuklenenSet.has(norm)) eksikler.add(norm);
     });
     return Array.from(eksikler);

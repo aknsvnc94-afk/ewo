@@ -53,8 +53,13 @@ export async function POST(req: NextRequest) {
   if (hesaplaDelta) {
     if (!ay) return NextResponse.json({ error: 'ay gerekli' }, { status: 400 });
 
+    // Dosyada aynı kalıp kodu birden fazla kez geçiyorsa (mükerrer satır), sadece sonuncusunu tut
+    const benzersizKayitlarMap = new Map<string, any>();
+    kayitlar.forEach((k: any) => benzersizKayitlarMap.set(k.kalip_kodu_normalize, k));
+    const benzersizKayitlar = Array.from(benzersizKayitlarMap.values());
+
     // Her kalıp için, seçilen aydan ÖNCEKİ en yakın kaydı bul (kümülatif farkı almak için)
-    const normKodlar = kayitlar.map((k: any) => k.kalip_kodu_normalize);
+    const normKodlar = benzersizKayitlar.map((k: any) => k.kalip_kodu_normalize);
     const { data: oncekiKayitlar, error: oncekiErr } = await supabase
       .from('kalip_baski_sayilari')
       .select('kalip_kodu_normalize, ay, guncel_baski_toplam')
@@ -71,7 +76,7 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    eklenecekler = kayitlar.map((k: any) => {
+    eklenecekler = benzersizKayitlar.map((k: any) => {
       const oncekiGuncel = oncekiMap[k.kalip_kodu_normalize];
       const ayGerceklesen = oncekiGuncel !== undefined ? k.guncel_baski_toplam - oncekiGuncel : null;
       return {
@@ -86,17 +91,24 @@ export async function POST(req: NextRequest) {
       };
     });
   } else {
-    // Geçmiş ay toplu içe aktarımı: her şey dosyadan doğrudan geliyor
-    eklenecekler = kayitlar.map((k: any) => ({
-      fabrika_id: session.fabrikaId,
-      kalip_kodu: k.kalip_kodu,
-      kalip_kodu_normalize: k.kalip_kodu_normalize,
-      ay: k.ay || ay,
-      guncel_baski_toplam: k.guncel_baski_toplam ?? null,
-      yt_baski: k.yt_baski,
-      ariza_sayisi_manuel: k.ariza_sayisi_manuel ?? null,
-      yukleyen_id: session.id,
-    }));
+    // Geçmiş ay toplu içe aktarımı: her şey dosyadan doğrudan geliyor.
+    // Aynı kalıp+ay için dosyada mükerrer satır varsa (Postgres "ON CONFLICT" hatası
+    // vermemesi için) sadece sonuncusunu tutuyoruz.
+    const benzersizMap = new Map<string, any>();
+    kayitlar.forEach((k: any) => {
+      const anahtarAy = k.ay || ay;
+      benzersizMap.set(`${k.kalip_kodu_normalize}|${anahtarAy}`, {
+        fabrika_id: session.fabrikaId,
+        kalip_kodu: k.kalip_kodu,
+        kalip_kodu_normalize: k.kalip_kodu_normalize,
+        ay: anahtarAy,
+        guncel_baski_toplam: k.guncel_baski_toplam ?? null,
+        yt_baski: k.yt_baski,
+        ariza_sayisi_manuel: k.ariza_sayisi_manuel ?? null,
+        yukleyen_id: session.id,
+      });
+    });
+    eklenecekler = Array.from(benzersizMap.values());
     if (eklenecekler.some((k: any) => !k.ay)) {
       return NextResponse.json({ error: 'Her kayıt için ay (YYYY-MM) gerekli' }, { status: 400 });
     }
