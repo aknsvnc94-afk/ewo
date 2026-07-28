@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { parseBaskiBuffer, kalipKoduNormalize, kalipKoduKismiCikar } from '@/lib/kalipBaskiParse';
 import { parseGecmisKpiBuffer } from '@/lib/kalipKpiGecmisParse';
@@ -230,6 +230,45 @@ export default function PerformansPage() {
   }, [tumVeri, kumulatifArizaSayaci, msbfAylikSonuclar]);
 
   const [msbfGrup, setMsbfGrup] = useState<'tumu' | 'fommar'>('tumu');
+  const [genisletilenKalip, setGenisletilenKalip] = useState<string | null>(null);
+
+  // Her kalıp için, o kalıba ait TÜM ayların (yüklü olan) ay bazlı baskı/arıza/MSBF
+  // dökümü — satıra tıklayınca açılan detay için
+  const kalipAylikGecmisMap = useMemo(() => {
+    const map: Record<string, { ay: string; baski: number | null; ariza: number; msbf: number | null }[]> = {};
+
+    function oAyinCanliArizaSayaci(yil: number, ayNo: number) {
+      const sayac: Record<string, number> = {};
+      kayitlar.forEach((k) => {
+        if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic) return;
+        const t = new Date(k.baslangic);
+        if (t.getFullYear() !== yil || t.getMonth() + 1 !== ayNo) return;
+        const norm = kalipKoduNormalize(kalipKoduKismiCikar(k.kalip_kodu));
+        sayac[norm] = (sayac[norm] || 0) + 1;
+      });
+      return sayac;
+    }
+
+    const ayGruplari: Record<string, BaskiKaydi[]> = {};
+    tumVeri.forEach((b) => {
+      if (!ayGruplari[b.ay]) ayGruplari[b.ay] = [];
+      ayGruplari[b.ay].push(b);
+    });
+
+    Object.entries(ayGruplari).forEach(([ay, kayitlarBuAy]) => {
+      const [yil, ayNo] = ay.split('-').map(Number);
+      const canliSayac = oAyinCanliArizaSayaci(yil, ayNo);
+      kayitlarBuAy.forEach((b) => {
+        const ariza = b.ariza_sayisi_manuel ?? (canliSayac[b.kalip_kodu_normalize] || 0);
+        const msbf = b.yt_baski !== null && ariza > 0 ? b.yt_baski / ariza : null;
+        if (!map[b.kalip_kodu_normalize]) map[b.kalip_kodu_normalize] = [];
+        map[b.kalip_kodu_normalize].push({ ay, baski: b.yt_baski, ariza, msbf });
+      });
+    });
+
+    Object.values(map).forEach((liste) => liste.sort((a, b) => a.ay.localeCompare(b.ay)));
+    return map;
+  }, [tumVeri, kayitlar]);
 
   const msbfGoruntulenen = useMemo(() => {
     if (msbfGrup === 'tumu') return msbfBirlesikSonuclar;
@@ -404,9 +443,9 @@ export default function PerformansPage() {
             {baskiMesaj && <p style={{ marginTop: 10 }}>{baskiMesaj}</p>}
           </div>
 
-          <div className="card">
-            <h3>🔍 Teşhis: EWO'daki KA Arızalarının Kalıp Kodları (Ham Veri)</h3>
-            <p className="muted">
+          <details className="card">
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>🔍 Teşhis: EWO'daki KA Arızalarının Kalıp Kodları (Ham Veri)</summary>
+            <p className="muted" style={{ marginTop: 10 }}>
               Bu liste, EWO Arıza Kayıtları'ndaki (kategori=KA) kalıp kodu alanının <strong>tam olarak ne yazdığını</strong>
               gösterir — baskı sayısı Excel'indeki kodlarla (örn. FOM001, FOM-008) karşılaştırıp format farkı olup
               olmadığını görebilirsiniz. Toplam {hamKalipKoduListesi.length} farklı kalıp kodu, tüm zamanlar.
@@ -430,7 +469,24 @@ export default function PerformansPage() {
               </table>
             )}
             {hamKalipKoduListesi.length > 50 && <p className="muted">...ve {hamKalipKoduListesi.length - 50} tane daha (sadece ilk 50 gösteriliyor)</p>}
-          </div>
+          </details>
+
+          <details className="card">
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Geçmiş Ay Verilerini Toplu İçe Aktar (Ocak-Mayıs vb.)</summary>
+            <p className="muted" style={{ marginTop: 10 }}>
+              İlk KPI dosyanız gibi aylık blok yapılı bir Excel'den, sadece Fompak (FOM) ve Martur (MAR) kalıplarının
+              dolu olan aylarını (o ay gerçekleşen baskı, güncel kümülatif baskı ve arıza sayısı) toplu olarak içe aktarır.
+            </p>
+            <div className="row" style={{ flexWrap: 'wrap' }}>
+              <label className="muted">Yıl
+                <input type="number" value={gecmisYil} onChange={(e) => setGecmisYil(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 100 }} />
+              </label>
+              <label className="muted">Dosya
+                <input type="file" accept=".xlsx,.xls" onChange={gecmisDosyaYukle} disabled={gecmisYukleniyor} style={{ display: 'block', marginTop: 4 }} />
+              </label>
+            </div>
+            {gecmisMesaj && <p style={{ marginTop: 10 }}>{gecmisMesaj}</p>}
+          </details>
 
           <div className="card">
             <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
@@ -462,20 +518,47 @@ export default function PerformansPage() {
                 </thead>
                 <tbody>
                   {msbfGoruntulenen.map((s) => (
-                    <tr key={s.kalip_kodu_normalize}>
-                      <td>{s.kalip_kodu}</td>
-                      <td>{s.ayBaskisi !== null ? s.ayBaskisi.toLocaleString('tr-TR') : <span className="muted">Veri yok</span>}</td>
-                      <td>{s.ayArizaSayisi}</td>
-                      <td className={s.ayArizaSayisi > 0 ? '' : 'muted'}>
-                        {s.ayMsbf !== null ? Math.round(s.ayMsbf).toLocaleString('tr-TR') : '-'}
-                      </td>
-                      <td>{s.omurBaski.toLocaleString('tr-TR')}</td>
-                      <td>{s.omurArizaSayisi}</td>
-                      <td className={s.omurArizaSayisi > 0 ? '' : 'muted'}>
-                        {s.omurMsbf !== null ? Math.round(s.omurMsbf).toLocaleString('tr-TR') : 'Arıza yok'}
-                      </td>
-                      <td className="muted" style={{ fontSize: 12 }}>{s.kaynak}</td>
-                    </tr>
+                    <React.Fragment key={s.kalip_kodu_normalize}>
+                      <tr
+                        onClick={() => setGenisletilenKalip(genisletilenKalip === s.kalip_kodu_normalize ? null : s.kalip_kodu_normalize)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td>{genisletilenKalip === s.kalip_kodu_normalize ? '▾ ' : '▸ '}{s.kalip_kodu}</td>
+                        <td>{s.ayBaskisi !== null ? s.ayBaskisi.toLocaleString('tr-TR') : <span className="muted">Veri yok</span>}</td>
+                        <td>{s.ayArizaSayisi}</td>
+                        <td className={s.ayArizaSayisi > 0 ? '' : 'muted'}>
+                          {s.ayMsbf !== null ? Math.round(s.ayMsbf).toLocaleString('tr-TR') : '-'}
+                        </td>
+                        <td>{s.omurBaski.toLocaleString('tr-TR')}</td>
+                        <td>{s.omurArizaSayisi}</td>
+                        <td className={s.omurArizaSayisi > 0 ? '' : 'muted'}>
+                          {s.omurMsbf !== null ? Math.round(s.omurMsbf).toLocaleString('tr-TR') : 'Arıza yok'}
+                        </td>
+                        <td className="muted" style={{ fontSize: 12 }}>{s.kaynak}</td>
+                      </tr>
+                      {genisletilenKalip === s.kalip_kodu_normalize && (
+                        <tr>
+                          <td colSpan={8} style={{ background: 'var(--panel-2)' }}>
+                            <strong style={{ fontSize: 13 }}>{s.kalip_kodu} — Aylık MSBF Geçmişi (kümülatif olarak artar)</strong>
+                            <table style={{ marginTop: 8 }}>
+                              <thead><tr><th>Ay</th><th>O Ay Baskı</th><th>O Ay Arıza</th><th>O Ay MSBF</th></tr></thead>
+                              <tbody>
+                                {(kalipAylikGecmisMap[s.kalip_kodu_normalize] || []).map((g) => (
+                                  <tr key={g.ay}>
+                                    <td>{g.ay}</td>
+                                    <td>{g.baski !== null ? g.baski.toLocaleString('tr-TR') : <span className="muted">İlk ay, veri yok</span>}</td>
+                                    <td>{g.ariza}</td>
+                                    <td className={g.ariza > 0 ? '' : 'muted'}>
+                                      {g.msbf !== null ? Math.round(g.msbf).toLocaleString('tr-TR') : '-'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
