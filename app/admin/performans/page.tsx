@@ -406,21 +406,6 @@ export default function PerformansPage() {
             {gecmisMesaj && <p style={{ marginTop: 10 }}>{gecmisMesaj}</p>}
           </div>
 
-          <div className="row" style={{ marginBottom: 14, flexWrap: 'wrap' }}>
-            <div className="card" style={{ flex: 1, minWidth: 180, textAlign: 'center', margin: 0 }}>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>
-                {genelOrtalamaMsbf !== null ? Math.round(genelOrtalamaMsbf).toLocaleString('tr-TR') : '-'}
-              </div>
-              <div className="muted">Ömür Boyu Genel Ortalama MSBF ({msbfBirlesikSonuclar.length} kalıp, {msbfAy} itibarıyla)</div>
-            </div>
-            <div className="card" style={{ flex: 1, minWidth: 180, textAlign: 'center', margin: 0 }}>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>
-                {fomMarOrtalamaMsbf.msbf !== null ? Math.round(fomMarOrtalamaMsbf.msbf).toLocaleString('tr-TR') : '-'}
-              </div>
-              <div className="muted">Fompak + Martur Ömür Boyu Genel MSBF ({fomMarOrtalamaMsbf.adet} kalıp)</div>
-            </div>
-          </div>
-
           {eslesmeyenKalipKodlari.length > 0 && (
             <div className="card" style={{ borderColor: 'var(--warn)' }}>
               <h3 className="status-Devam">⚠ Baskı Sayısı Yüklenmemiş Kalıplar</h3>
