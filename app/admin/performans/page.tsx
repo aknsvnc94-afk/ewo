@@ -165,35 +165,29 @@ export default function PerformansPage() {
     return sayac;
   }, [kayitlar, msbfAy]);
 
-  // AYLIK tablo: seçilen ayın kendi verileri (Güncel Baskı / O Ay Baskı / Arıza / MSBF)
+  // AYLIK: seçilen ayın kendi verileri (o ay baskı / o ay arıza / o ayki MSBF)
   const msbfAylikSonuclar = useMemo(() => {
-    return ayVerisi
-      .map((b) => {
-        const arizaSayisi = b.ariza_sayisi_manuel ?? (buAyArizaSayaci[b.kalip_kodu_normalize] || 0);
-        const ayBaskisi = b.yt_baski; // null olabilir (ilk yüklenen ay, önceki veri yoksa)
-        const msbf = ayBaskisi !== null && arizaSayisi > 0 ? ayBaskisi / arizaSayisi : null;
-        return {
-          kalip_kodu: b.kalip_kodu, kalip_kodu_normalize: b.kalip_kodu_normalize,
-          guncelToplam: b.guncel_baski_toplam, ayBaskisi, arizaSayisi, msbf,
-          kaynak: b.ariza_sayisi_manuel !== null && b.ariza_sayisi_manuel !== undefined ? 'İçe Aktarılan' : 'EWO (Canlı)',
-        };
-      })
-      .sort((a, b) => {
-        if (a.msbf === null) return 1;
-        if (b.msbf === null) return -1;
-        return a.msbf - b.msbf;
-      });
+    const map: Record<string, { ayBaskisi: number | null; ayArizaSayisi: number; ayMsbf: number | null; kaynak: string }> = {};
+    ayVerisi.forEach((b) => {
+      const arizaSayisi = b.ariza_sayisi_manuel ?? (buAyArizaSayaci[b.kalip_kodu_normalize] || 0);
+      const ayBaskisi = b.yt_baski;
+      const msbf = ayBaskisi !== null && arizaSayisi > 0 ? ayBaskisi / arizaSayisi : null;
+      map[b.kalip_kodu_normalize] = {
+        ayBaskisi, ayArizaSayisi: arizaSayisi, ayMsbf: msbf,
+        kaynak: b.ariza_sayisi_manuel !== null && b.ariza_sayisi_manuel !== undefined ? 'İçe Aktarılan' : 'EWO (Canlı)',
+      };
+    });
+    return map;
   }, [ayVerisi, buAyArizaSayaci]);
 
-  // KÜMÜLATİF (ömür boyu) özet: her kalıp için EN SON güncel (kümülatif) baskı değeri
-  // (zaten kümülatif olduğu için toplanmaz, en güncel kayıt alınır) / o ana kadarki toplam arıza
-  const msbfKumulatifSonuclar = useMemo(() => {
+  // BİRLEŞİK tablo: her kalıp için hem bu ayki hem ömür boyu (kümülatif) MSBF yan yana
+  const msbfBirlesikSonuclar = useMemo(() => {
     const enSonMap: Record<string, BaskiKaydi> = {};
     [...tumVeri].sort((a, b) => a.ay.localeCompare(b.ay)).forEach((b) => {
       enSonMap[b.kalip_kodu_normalize] = b; // en son (en büyük ay) kayıt kalır
     });
     const manuelToplamMap: Record<string, number> = {};
-    let herhangiManuelVarMi: Record<string, boolean> = {};
+    const herhangiManuelVarMi: Record<string, boolean> = {};
     tumVeri.forEach((b) => {
       if (b.ariza_sayisi_manuel !== null && b.ariza_sayisi_manuel !== undefined) {
         manuelToplamMap[b.kalip_kodu_normalize] = (manuelToplamMap[b.kalip_kodu_normalize] || 0) + b.ariza_sayisi_manuel;
@@ -203,31 +197,44 @@ export default function PerformansPage() {
 
     return Object.entries(enSonMap)
       .map(([norm, b]) => {
-        const arizaSayisi = herhangiManuelVarMi[norm] ? manuelToplamMap[norm] : (kumulatifArizaSayaci[norm] || 0);
-        const msbf = arizaSayisi > 0 ? b.guncel_baski_toplam / arizaSayisi : null;
-        return { kalip_kodu: b.kalip_kodu, kalip_kodu_normalize: norm, guncelToplam: b.guncel_baski_toplam, arizaSayisi, msbf };
+        const omurArizaSayisi = herhangiManuelVarMi[norm] ? manuelToplamMap[norm] : (kumulatifArizaSayaci[norm] || 0);
+        const omurMsbf = omurArizaSayisi > 0 && b.guncel_baski_toplam !== null ? b.guncel_baski_toplam / omurArizaSayisi : null;
+        const ay = msbfAylikSonuclar[norm];
+        return {
+          kalip_kodu: b.kalip_kodu, kalip_kodu_normalize: norm,
+          ayBaskisi: ay?.ayBaskisi ?? null, ayArizaSayisi: ay?.ayArizaSayisi ?? 0, ayMsbf: ay?.ayMsbf ?? null,
+          omurBaski: b.guncel_baski_toplam ?? 0, omurArizaSayisi, omurMsbf,
+          kaynak: ay?.kaynak ?? (herhangiManuelVarMi[norm] ? 'İçe Aktarılan' : 'EWO (Canlı)'),
+        };
       })
       .sort((a, b) => {
-        if (a.msbf === null) return 1;
-        if (b.msbf === null) return -1;
-        return a.msbf - b.msbf;
+        if (a.omurMsbf === null) return 1;
+        if (b.omurMsbf === null) return -1;
+        return a.omurMsbf - b.omurMsbf;
       });
-  }, [tumVeri, kumulatifArizaSayaci]);
+  }, [tumVeri, kumulatifArizaSayaci, msbfAylikSonuclar]);
+
+  const [msbfGrup, setMsbfGrup] = useState<'tumu' | 'fommar'>('tumu');
+
+  const msbfGoruntulenen = useMemo(() => {
+    if (msbfGrup === 'tumu') return msbfBirlesikSonuclar;
+    return msbfBirlesikSonuclar.filter((s) => s.kalip_kodu_normalize.startsWith('FOM') || s.kalip_kodu_normalize.startsWith('MAR'));
+  }, [msbfBirlesikSonuclar, msbfGrup]);
 
   const genelOrtalamaMsbf = useMemo(() => {
-    const gecerli = msbfKumulatifSonuclar.filter((s) => s.msbf !== null);
-    const toplamBaski = gecerli.reduce((t, s) => t + s.guncelToplam, 0);
-    const toplamAriza = gecerli.reduce((t, s) => t + s.arizaSayisi, 0);
+    const gecerli = msbfBirlesikSonuclar.filter((s) => s.omurMsbf !== null);
+    const toplamBaski = gecerli.reduce((t, s) => t + s.omurBaski, 0);
+    const toplamAriza = gecerli.reduce((t, s) => t + s.omurArizaSayisi, 0);
     return toplamAriza > 0 ? toplamBaski / toplamAriza : null;
-  }, [msbfKumulatifSonuclar]);
+  }, [msbfBirlesikSonuclar]);
 
   const fomMarOrtalamaMsbf = useMemo(() => {
-    const fomMar = msbfKumulatifSonuclar.filter((s) => s.kalip_kodu_normalize.startsWith('FOM') || s.kalip_kodu_normalize.startsWith('MAR'));
-    const gecerli = fomMar.filter((s) => s.msbf !== null);
-    const toplamBaski = gecerli.reduce((t, s) => t + s.guncelToplam, 0);
-    const toplamAriza = gecerli.reduce((t, s) => t + s.arizaSayisi, 0);
+    const fomMar = msbfBirlesikSonuclar.filter((s) => s.kalip_kodu_normalize.startsWith('FOM') || s.kalip_kodu_normalize.startsWith('MAR'));
+    const gecerli = fomMar.filter((s) => s.omurMsbf !== null);
+    const toplamBaski = gecerli.reduce((t, s) => t + s.omurBaski, 0);
+    const toplamAriza = gecerli.reduce((t, s) => t + s.omurArizaSayisi, 0);
     return { adet: fomMar.length, msbf: toplamAriza > 0 ? toplamBaski / toplamAriza : null };
-  }, [msbfKumulatifSonuclar]);
+  }, [msbfBirlesikSonuclar]);
 
   // Teşhis: bu ay KA arızası olan ama baskı verisi hiç yüklenmemiş kalıp kodları
   const eslesmeyenKalipKodlari = useMemo(() => {
@@ -402,7 +409,7 @@ export default function PerformansPage() {
               <div style={{ fontSize: 24, fontWeight: 700 }}>
                 {genelOrtalamaMsbf !== null ? Math.round(genelOrtalamaMsbf).toLocaleString('tr-TR') : '-'}
               </div>
-              <div className="muted">Ömür Boyu Genel Ortalama MSBF ({msbfKumulatifSonuclar.length} kalıp, {msbfAy} itibarıyla)</div>
+              <div className="muted">Ömür Boyu Genel Ortalama MSBF ({msbfBirlesikSonuclar.length} kalıp, {msbfAy} itibarıyla)</div>
             </div>
             <div className="card" style={{ flex: 1, minWidth: 180, textAlign: 'center', margin: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 700 }}>
@@ -423,51 +430,48 @@ export default function PerformansPage() {
           )}
 
           <div className="card">
-            <h3>{msbfAy} — Kalıp Bazında Aylık MSBF (En Düşük → En Yüksek)</h3>
+            <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <h3>{msbfAy} İtibarıyla Kalıp Bazında MSBF</h3>
+              <div className="row">
+                <button className={msbfGrup === 'tumu' ? '' : 'secondary'} onClick={() => setMsbfGrup('tumu')}>
+                  Tüm Kalıplar ({msbfBirlesikSonuclar.length})
+                </button>
+                <button className={msbfGrup === 'fommar' ? '' : 'secondary'} onClick={() => setMsbfGrup('fommar')}>
+                  Fompak + Martur ({fomMarOrtalamaMsbf.adet})
+                </button>
+              </div>
+            </div>
             <p className="muted">
-              Bu, orijinal KPI dosyanızdaki aylık sütun yapısının birebir karşılığıdır: Güncel Baskı Sayısı (ERP'den,
-              kümülatif) → O Ay Baskı Sayısı (fark) → Arıza Sayısı → MSBF.
+              Her kalıp için hem seçilen ayki hem ömür boyu (kümülatif) MSBF yan yana gösterilir.
+              Düşük MSBF, o kalıbın daha az baskıda bir arıza yaptığını, yani daha sorunlu olduğunu gösterir.
             </p>
-            {msbfAylikSonuclar.length === 0 ? (
-              <p className="muted">{msbfAy} için henüz baskı sayısı yüklenmedi.</p>
+            {msbfGoruntulenen.length === 0 ? (
+              <p className="muted">Bu grup için henüz baskı sayısı yüklenmedi.</p>
             ) : (
               <table>
-                <thead><tr><th>Kalıp Kodu</th><th>Güncel Baskı Sayısı (ERP)</th><th>{msbfAy} Ayı Baskı Sayısı</th><th>Arıza Sayısı</th><th>MSBF</th><th>Kaynak</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Kalıp Kodu</th>
+                    <th>{msbfAy} Baskı</th><th>{msbfAy} Arıza</th><th>{msbfAy} MSBF</th>
+                    <th>Ömür Boyu Baskı</th><th>Ömür Boyu Arıza</th><th>Ömür Boyu MSBF</th>
+                    <th>Kaynak</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {msbfAylikSonuclar.map((s) => (
+                  {msbfGoruntulenen.map((s) => (
                     <tr key={s.kalip_kodu_normalize}>
                       <td>{s.kalip_kodu}</td>
-                      <td>{s.guncelToplam.toLocaleString('tr-TR')}</td>
-                      <td>{s.ayBaskisi !== null ? s.ayBaskisi.toLocaleString('tr-TR') : <span className="muted">İlk ay, veri yok</span>}</td>
-                      <td>{s.arizaSayisi}</td>
-                      <td className={s.arizaSayisi > 0 ? '' : 'muted'}>
-                        {s.msbf !== null ? Math.round(s.msbf).toLocaleString('tr-TR') : 'Arıza yok'}
+                      <td>{s.ayBaskisi !== null ? s.ayBaskisi.toLocaleString('tr-TR') : <span className="muted">Veri yok</span>}</td>
+                      <td>{s.ayArizaSayisi}</td>
+                      <td className={s.ayArizaSayisi > 0 ? '' : 'muted'}>
+                        {s.ayMsbf !== null ? Math.round(s.ayMsbf).toLocaleString('tr-TR') : '-'}
+                      </td>
+                      <td>{s.omurBaski.toLocaleString('tr-TR')}</td>
+                      <td>{s.omurArizaSayisi}</td>
+                      <td className={s.omurArizaSayisi > 0 ? '' : 'muted'}>
+                        {s.omurMsbf !== null ? Math.round(s.omurMsbf).toLocaleString('tr-TR') : 'Arıza yok'}
                       </td>
                       <td className="muted" style={{ fontSize: 12 }}>{s.kaynak}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          <div className="card">
-            <h3>Ömür Boyu Kümülatif MSBF ({msbfAy} itibarıyla) — Kalıp Bazında</h3>
-            <p className="muted">Kalıbın üretime girdiğinden bu yana toplam baskı sayısı / toplam arıza sayısı.</p>
-            {msbfKumulatifSonuclar.length === 0 ? (
-              <p className="muted">Henüz baskı sayısı yüklenmedi.</p>
-            ) : (
-              <table>
-                <thead><tr><th>Kalıp Kodu</th><th>Ömür Boyu Toplam Baskı</th><th>Ömür Boyu Toplam Arıza</th><th>Kümülatif MSBF</th></tr></thead>
-                <tbody>
-                  {msbfKumulatifSonuclar.map((s) => (
-                    <tr key={s.kalip_kodu_normalize}>
-                      <td>{s.kalip_kodu}</td>
-                      <td>{s.guncelToplam.toLocaleString('tr-TR')}</td>
-                      <td>{s.arizaSayisi}</td>
-                      <td className={s.arizaSayisi > 0 ? '' : 'muted'}>
-                        {s.msbf !== null ? Math.round(s.msbf).toLocaleString('tr-TR') : 'Arıza yok'}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
