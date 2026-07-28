@@ -82,6 +82,7 @@ export default function AdminDashboard() {
           <Link href="/admin/siparisler"><button className="secondary">Sipariş Takip</button></Link>
           <Link href="/admin/aksiyonlar"><button className="secondary">Aksiyon Takip</button></Link>
           <Link href="/admin/analiz"><button className="secondary">EWO Analiz / Pareto</button></Link>
+          <Link href="/admin/performans"><button className="secondary">Performans (MTTR/MTBF)</button></Link>
           <Link href="/admin/bana-atananlar"><button className="secondary">Bana Atananlar</button></Link>
           <Link href="/admin/yeni-kayit"><button className="secondary">+ Yeni Kayıt</button></Link>
           <Link href="/admin/makineler"><button className="secondary">Makine Yedek Parça</button></Link>
