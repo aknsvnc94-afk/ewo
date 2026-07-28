@@ -1,13 +1,14 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { parseBaskiBuffer, kalipKoduNormalize } from '@/lib/kalipBaskiParse';
 
 type Kayit = {
   id: string; tezgah: string; kategori: string; baslangic: string; sure_sn: number;
-  tamamlanma_durumu: string;
+  tamamlanma_durumu: string; kalip_kodu: string | null;
 };
 
-type Sekme = 'mttr' | 'mtbf' | 'duruslar';
+type Sekme = 'mttr' | 'mtbf' | 'msbf' | 'duruslar';
 
 function saniyeToOkunabilir(sn: number) {
   if (!sn || sn <= 0) return '0 dk';
@@ -23,6 +24,11 @@ function bugunISO(gunOnce = 0) {
   return d.toISOString().slice(0, 10);
 }
 
+function buAyYYYYMM() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export default function PerformansPage() {
   const [kayitlar, setKayitlar] = useState<Kayit[]>([]);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -32,6 +38,74 @@ export default function PerformansPage() {
   const [bitisTarihi, setBitisTarihi] = useState(bugunISO(0));
   const [kategoriFiltre, setKategoriFiltre] = useState('');
   const [tezgahFiltre, setTezgahFiltre] = useState('');
+
+  const [msbfAy, setMsbfAy] = useState(buAyYYYYMM());
+  const [baskiVerileri, setBaskiVerileri] = useState<{ kalip_kodu: string; kalip_kodu_normalize: string; yt_baski: number }[]>([]);
+  const [baskiYukleniyor, setBaskiYukleniyor] = useState(false);
+  const [baskiMesaj, setBaskiMesaj] = useState('');
+
+  async function baskiVerileriGetir(ay: string) {
+    const res = await fetch(`/api/kalip-baski?ay=${ay}`);
+    const data = await res.json();
+    setBaskiVerileri(data.kayitlar || []);
+  }
+
+  useEffect(() => { baskiVerileriGetir(msbfAy); }, [msbfAy]);
+
+  async function baskiDosyaYukle(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBaskiYukleniyor(true);
+    setBaskiMesaj('Dosya okunuyor...');
+    try {
+      const buf = await file.arrayBuffer();
+      const { kayitlar, toplamSatir, hata } = parseBaskiBuffer(buf);
+      if (hata) { setBaskiMesaj(`Hata: ${hata}`); return; }
+      if (kayitlar.length === 0) {
+        setBaskiMesaj(`Toplam ${toplamSatir} satır tarandı, geçerli kalıp kodu bulunamadı.`);
+        return;
+      }
+      setBaskiMesaj(`${kayitlar.length} kalıp bulundu, gönderiliyor...`);
+      const res = await fetch('/api/kalip-baski', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kayitlar, ay: msbfAy }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setBaskiMesaj(`Hata: ${data.error}`); return; }
+      setBaskiMesaj(`✓ ${data.islenen} kalıbın ${msbfAy} ayı baskı sayısı kaydedildi`);
+      baskiVerileriGetir(msbfAy);
+    } catch (err: any) {
+      setBaskiMesaj(`Hata: Dosya okunamadı (${err?.message || 'bilinmeyen hata'})`);
+    } finally {
+      setBaskiYukleniyor(false);
+      e.target.value = '';
+    }
+  }
+
+  // MSBF: seçilen ay içindeki KA (kalıp arızası) kayıtlarını kalıp koduna göre say
+  const msbfSonuclari = useMemo(() => {
+    const [yil, ayNo] = msbfAy.split('-').map(Number);
+    const arizaSayaci: Record<string, number> = {};
+    kayitlar.forEach((k) => {
+      if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic) return;
+      const t = new Date(k.baslangic);
+      if (t.getFullYear() !== yil || t.getMonth() + 1 !== ayNo) return;
+      const norm = kalipKoduNormalize(k.kalip_kodu);
+      arizaSayaci[norm] = (arizaSayaci[norm] || 0) + 1;
+    });
+
+    return baskiVerileri
+      .map((b) => {
+        const arizaSayisi = arizaSayaci[b.kalip_kodu_normalize] || 0;
+        const msbf = arizaSayisi > 0 ? b.yt_baski / arizaSayisi : null;
+        return { kalip_kodu: b.kalip_kodu, yt_baski: b.yt_baski, arizaSayisi, msbf };
+      })
+      .sort((a, b) => {
+        if (a.msbf === null) return 1;
+        if (b.msbf === null) return -1;
+        return a.msbf - b.msbf; // en düşük MSBF (en sorunlu kalıp) üstte
+      });
+  }, [baskiVerileri, kayitlar, msbfAy]);
 
   useEffect(() => {
     fetch('/api/records').then((r) => r.json()).then((data) => {
@@ -113,40 +187,90 @@ export default function PerformansPage() {
       </div>
       <p className="muted">MTTR, MTBF ve arıza duruş süreleri — seçilen tarih aralığı ve filtrelere göre hesaplanır.</p>
 
-      <div className="card">
-        <div className="row" style={{ flexWrap: 'wrap' }}>
-          <label className="muted">Başlangıç Tarihi
-            <input type="date" value={baslangicTarihi} onChange={(e) => setBaslangicTarihi(e.target.value)} style={{ display: 'block', marginTop: 4 }} />
-          </label>
-          <label className="muted">Bitiş Tarihi
-            <input type="date" value={bitisTarihi} onChange={(e) => setBitisTarihi(e.target.value)} style={{ display: 'block', marginTop: 4 }} />
-          </label>
-          <label className="muted">Kategori
-            <select value={kategoriFiltre} onChange={(e) => setKategoriFiltre(e.target.value)} style={{ display: 'block', marginTop: 4 }}>
-              <option value="">Tüm Kategoriler</option>
-              <option value="MA">MA - Makine Arızası</option>
-              <option value="BA">BA - Montaj Banko Arızası</option>
-              <option value="KA">KA - Kalıp Arızası</option>
-              <option value="RA">RA - Robot Arızası</option>
-              <option value="GT">GT - Genel Tesis</option>
-            </select>
-          </label>
-          <label className="muted">Makine
-            <select value={tezgahFiltre} onChange={(e) => setTezgahFiltre(e.target.value)} style={{ display: 'block', marginTop: 4 }}>
-              <option value="">Tüm Makineler</option>
-              {tezgahListesi.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </label>
+      {sekme !== 'msbf' && (
+        <div className="card">
+          <div className="row" style={{ flexWrap: 'wrap' }}>
+            <label className="muted">Başlangıç Tarihi
+              <input type="date" value={baslangicTarihi} onChange={(e) => setBaslangicTarihi(e.target.value)} style={{ display: 'block', marginTop: 4 }} />
+            </label>
+            <label className="muted">Bitiş Tarihi
+              <input type="date" value={bitisTarihi} onChange={(e) => setBitisTarihi(e.target.value)} style={{ display: 'block', marginTop: 4 }} />
+            </label>
+            <label className="muted">Kategori
+              <select value={kategoriFiltre} onChange={(e) => setKategoriFiltre(e.target.value)} style={{ display: 'block', marginTop: 4 }}>
+                <option value="">Tüm Kategoriler</option>
+                <option value="MA">MA - Makine Arızası</option>
+                <option value="BA">BA - Montaj Banko Arızası</option>
+                <option value="KA">KA - Kalıp Arızası</option>
+                <option value="RA">RA - Robot Arızası</option>
+                <option value="GT">GT - Genel Tesis</option>
+              </select>
+            </label>
+            <label className="muted">Makine
+              <select value={tezgahFiltre} onChange={(e) => setTezgahFiltre(e.target.value)} style={{ display: 'block', marginTop: 4 }}>
+                <option value="">Tüm Makineler</option>
+                {tezgahListesi.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="row" style={{ marginBottom: 14 }}>
         <button className={sekme === 'mttr' ? '' : 'secondary'} onClick={() => setSekme('mttr')}>MTTR</button>
         <button className={sekme === 'mtbf' ? '' : 'secondary'} onClick={() => setSekme('mtbf')}>MTBF</button>
+        <button className={sekme === 'msbf' ? '' : 'secondary'} onClick={() => setSekme('msbf')}>MSBF (Kalıp)</button>
         <button className={sekme === 'duruslar' ? '' : 'secondary'} onClick={() => setSekme('duruslar')}>Arıza Duruş Süreleri</button>
       </div>
 
-      {yukleniyor ? <p className="muted">Yükleniyor...</p> : genelAdet === 0 ? (
+      {sekme === 'msbf' ? (
+        <>
+          <div className="card">
+            <h3>Kalıp Baskı Sayısı Excel Yükle</h3>
+            <p className="muted">Kalıp Kodu ve YT_Baskı sütunlarını içeren ERP export dosyasını, ilgili ayı seçip yükleyin.</p>
+            <div className="row" style={{ flexWrap: 'wrap' }}>
+              <label className="muted">Ay
+                <input type="month" value={msbfAy} onChange={(e) => setMsbfAy(e.target.value)} style={{ display: 'block', marginTop: 4 }} />
+              </label>
+              <label className="muted">Dosya
+                <input type="file" accept=".xlsx,.xls" onChange={baskiDosyaYukle} disabled={baskiYukleniyor} style={{ display: 'block', marginTop: 4 }} />
+              </label>
+            </div>
+            {baskiMesaj && <p style={{ marginTop: 10 }}>{baskiMesaj}</p>}
+          </div>
+
+          <div className="card" style={{ borderColor: 'var(--border)' }}>
+            <p className="muted" style={{ margin: 0 }}>
+              ⓘ MSBF = O Ay Gerçekleşen Baskı Sayısı / O Ay Kalıp Arıza Sayısı. Arıza sayısı, EWO sistemindeki
+              KA (Kalıp Arızası) kayıtlarından, kalıp koduna göre otomatik hesaplanır.
+            </p>
+          </div>
+
+          <div className="card">
+            <h3>{msbfAy} — Kalıp Bazında MSBF (En Düşük → En Yüksek)</h3>
+            <p className="muted">Düşük MSBF, o kalıbın daha az baskıda bir arıza yaptığını, yani daha sorunlu olduğunu gösterir.</p>
+            {msbfSonuclari.length === 0 ? (
+              <p className="muted">Bu ay için henüz baskı sayısı yüklenmedi.</p>
+            ) : (
+              <table>
+                <thead><tr><th>Kalıp Kodu</th><th>Baskı Sayısı</th><th>Arıza Sayısı</th><th>MSBF</th></tr></thead>
+                <tbody>
+                  {msbfSonuclari.map((s) => (
+                    <tr key={s.kalip_kodu}>
+                      <td>{s.kalip_kodu}</td>
+                      <td>{s.yt_baski.toLocaleString('tr-TR')}</td>
+                      <td>{s.arizaSayisi}</td>
+                      <td className={s.arizaSayisi > 0 ? '' : 'muted'}>
+                        {s.msbf !== null ? Math.round(s.msbf).toLocaleString('tr-TR') : 'Arıza yok'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      ) : yukleniyor ? <p className="muted">Yükleniyor...</p> : genelAdet === 0 ? (
         <div className="card"><p className="muted">Seçilen filtrelerde kayıt bulunamadı.</p></div>
       ) : (
         <>
