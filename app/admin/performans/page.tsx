@@ -405,33 +405,6 @@ export default function PerformansPage() {
           </div>
 
           <div className="card">
-            <h3>Geçmiş Ay Verilerini Toplu İçe Aktar</h3>
-            <p className="muted">
-              İlk KPI dosyanız gibi aylık blok yapılı bir Excel'den, sadece Fompak (FOM) ve Martur (MAR) kalıplarının
-              dolu olan aylarını (o ay gerçekleşen baskı, güncel kümülatif baskı ve arıza sayısı) toplu olarak içe aktarır.
-            </p>
-            <div className="row" style={{ flexWrap: 'wrap' }}>
-              <label className="muted">Yıl
-                <input type="number" value={gecmisYil} onChange={(e) => setGecmisYil(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 100 }} />
-              </label>
-              <label className="muted">Dosya
-                <input type="file" accept=".xlsx,.xls" onChange={gecmisDosyaYukle} disabled={gecmisYukleniyor} style={{ display: 'block', marginTop: 4 }} />
-              </label>
-            </div>
-            {gecmisMesaj && <p style={{ marginTop: 10 }}>{gecmisMesaj}</p>}
-          </div>
-
-          {eslesmeyenKalipKodlari.length > 0 && (
-            <div className="card" style={{ borderColor: 'var(--warn)' }}>
-              <h3 className="status-Devam">⚠ Baskı Sayısı Yüklenmemiş Kalıplar</h3>
-              <p className="muted">
-                Bu kalıplarda EWO'da KA arızası kaydı var ama baskı sayısı henüz yüklenmediği için MSBF hesaplanamıyor:
-              </p>
-              <p style={{ fontFamily: 'monospace', fontSize: 13 }}>{eslesmeyenKalipKodlari.join(', ')}</p>
-            </div>
-          )}
-
-          <div className="card">
             <h3>🔍 Teşhis: EWO'daki KA Arızalarının Kalıp Kodları (Ham Veri)</h3>
             <p className="muted">
               Bu liste, EWO Arıza Kayıtları'ndaki (kategori=KA) kalıp kodu alanının <strong>tam olarak ne yazdığını</strong>
