@@ -11,7 +11,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from('siparis_kalemleri')
     .select(`
-      id, satir_metni, stok_kodu, miktar, teslim_tarihi, alindi, alinma_tarihi,
+      id, satir_metni, stok_kodu, stok_adi, aciklama, miktar, teslim_tarihi, alindi, alinma_tarihi,
       alan:alan_personel_id ( ad_soyad ),
       siparis:siparis_id ( id, dosya_adi, talep_no, yuklenme_tarihi )
     `)

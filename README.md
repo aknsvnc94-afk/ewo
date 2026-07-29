@@ -39,6 +39,9 @@ fabrikasını seçer. Ayrıca tüm fabrikalardaki personeli yönetebilen bir
    - `supabase/schema_v15_msbf_gelistirmeler.sql`
    - `supabase/schema_v16_kumulatif_duzeltme.sql`
    - `supabase/schema_v17_yt_baski_nullable.sql`
+   - `supabase/schema_v18_msbf_taban.sql`
+   - `supabase/schema_v19_proje_kaliplari.sql`
+   - `supabase/schema_v20_siparis_kalem_sutunlari.sql` (sipariş PDF: stok adı + açıklama sütunları)
      veri geriye dönük olarak "Plaskar" fabrikasına atanır)
 3. İlk fabrikanı (Plaskar zaten `schema_v10` ile otomatik oluşuyor) veya yeni bir
    fabrika daha eklemek istersen:

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 type Kalem = {
-  id: string; satir_metni: string; stok_kodu: string | null; miktar: string | null; teslim_tarihi: string | null;
+  id: string; satir_metni: string; stok_kodu: string | null; stok_adi: string | null; aciklama: string | null; miktar: string | null; teslim_tarihi: string | null;
   alindi: boolean; alinma_tarihi: string | null;
   alan: { ad_soyad: string } | null;
   siparis: { id: string; dosya_adi: string; talep_no: string | null; yuklenme_tarihi: string } | null;
@@ -69,7 +69,7 @@ export default function MalzemelerPage() {
         {gosterilecekler.length === 0 && <p className="muted">Gösterilecek malzeme yok.</p>}
         {gosterilecekler.map((k) => {
           const gecikmis = gecikmisMi(k.teslim_tarihi, k.alindi);
-          const aciklama = k.stok_kodu ? k.satir_metni.split('—')[1]?.split('|')[0]?.trim() : k.satir_metni;
+          const aciklama = k.stok_adi ?? (k.stok_kodu ? k.satir_metni.split('—')[1]?.split('|')[0]?.trim() : k.satir_metni);
           return (
             <div key={k.id} className="record-item" style={{ borderLeft: gecikmis ? '4px solid var(--danger)' : undefined }}>
               <div>{k.stok_kodu ? `${k.stok_kodu} — ` : ''}{aciklama}</div>

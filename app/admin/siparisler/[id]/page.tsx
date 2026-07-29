@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 type Kalem = {
-  id: string; satir_metni: string; stok_kodu: string | null; miktar: string | null; teslim_tarihi: string | null;
+  id: string; satir_metni: string; stok_kodu: string | null; stok_adi: string | null; aciklama: string | null; miktar: string | null; teslim_tarihi: string | null;
   alindi: boolean; alinma_tarihi: string | null; makineler: { id: string; ad: string }[];
   alan: { ad_soyad: string } | null;
 };
@@ -108,16 +108,19 @@ export default function SiparisDetayPage() {
         </div>
         <p className="muted">Açıklamadaki makine kodları ("MAKİNAKODU1 / MAKİNAKODU2" formatı) yüklemede otomatik eşlenir. Yanlış/eksik eşleşmeleri "Makine Eşleşmelerini Düzenle" ile buradan düzeltebilirsiniz.</p>
         <table>
-          <thead><tr><th>#</th><th>Stok Kodu</th><th>Açıklama</th><th>Miktar</th><th>Teslim Tarihi</th><th>Makine</th><th>Durum</th><th>Alan</th><th>Tarih/Saat</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>Stok Kodu</th><th>Stok Adı</th><th>Açıklama</th><th>Miktar</th><th>Teslim Tarihi</th><th>Makine</th><th>Durum</th><th>Alan</th><th>Tarih/Saat</th><th></th></tr></thead>
           <tbody>
             {kalemler.map((k, i) => {
               const gecikmis = gecikmisMi(k.teslim_tarihi, k.alindi);
-              const aciklama = k.stok_kodu ? k.satir_metni.split('—')[1]?.split('|')[0]?.trim() : k.satir_metni;
+              // Eski kayıtlarda stok_adi/aciklama sütunları boş olabilir; o durumda
+              // satir_metni'nden çıkarmaya devam ediyoruz (geriye dönük uyumluluk).
+              const stokAdi = k.stok_adi ?? (k.stok_kodu ? k.satir_metni.split('—')[1]?.split('|')[0]?.trim() : k.satir_metni);
               return (
                 <tr key={k.id}>
                   <td>{i + 1}</td>
                   <td>{k.stok_kodu || '-'}</td>
-                  <td>{aciklama}</td>
+                  <td>{stokAdi || '-'}</td>
+                  <td>{k.aciklama || <span className="muted">-</span>}</td>
                   <td>{k.miktar || '-'}</td>
                   <td style={{ color: gecikmis ? 'var(--danger)' : undefined, fontWeight: gecikmis ? 700 : undefined }}>
                     {k.teslim_tarihi || '-'} {gecikmis ? '(GECİKMİŞ)' : ''}
@@ -153,10 +156,11 @@ export default function SiparisDetayPage() {
         <div className="record-list mobile-only">
           {kalemler.map((k, i) => {
             const gecikmis = gecikmisMi(k.teslim_tarihi, k.alindi);
-            const aciklama = k.stok_kodu ? k.satir_metni.split('—')[1]?.split('|')[0]?.trim() : k.satir_metni;
+            const stokAdi = k.stok_adi ?? (k.stok_kodu ? k.satir_metni.split('—')[1]?.split('|')[0]?.trim() : k.satir_metni);
             return (
               <div key={k.id} className="record-item" style={{ borderLeft: gecikmis ? '4px solid var(--danger)' : undefined }}>
-                <div>{i + 1}. {k.stok_kodu ? `${k.stok_kodu} — ` : ''}{aciklama}</div>
+                <div>{i + 1}. {k.stok_kodu ? `${k.stok_kodu} — ` : ''}{stokAdi}</div>
+                {k.aciklama && <div className="muted">Açıklama: {k.aciklama}</div>}
                 {k.miktar && <div className="muted">Miktar: {k.miktar}</div>}
                 {k.teslim_tarihi && (
                   <div style={{ color: gecikmis ? 'var(--danger)' : undefined, fontWeight: gecikmis ? 700 : undefined }} className={gecikmis ? '' : 'muted'}>

@@ -19,7 +19,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   const { data: kalemler, error: kalemErr } = await supabase
     .from('siparis_kalemleri')
-    .select('id, sira, satir_metni, stok_kodu, miktar, teslim_tarihi, alindi, alinma_tarihi, alan:alan_personel_id ( ad_soyad )')
+    .select('id, sira, satir_metni, stok_kodu, stok_adi, aciklama, miktar, teslim_tarihi, alindi, alinma_tarihi, alan:alan_personel_id ( ad_soyad )')
     .eq('siparis_id', params.id)
     .order('sira', { ascending: true });
 
