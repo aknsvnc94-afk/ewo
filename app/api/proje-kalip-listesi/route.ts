@@ -30,12 +30,16 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = supabaseAdmin();
-  const eklenecekler = kalipListesi.map((k: any) => ({
-    fabrika_id: session.fabrikaId,
-    kalip_kodu: k.kalip_kodu,
-    kalip_kodu_normalize: k.kalip_kodu_normalize,
-    kalip_adi: k.kalip_adi || null,
-  }));
+  const benzersizMap = new Map<string, any>();
+  kalipListesi.forEach((k: any) => {
+    benzersizMap.set(k.kalip_kodu_normalize, {
+      fabrika_id: session.fabrikaId,
+      kalip_kodu: k.kalip_kodu,
+      kalip_kodu_normalize: k.kalip_kodu_normalize,
+      kalip_adi: k.kalip_adi || null,
+    });
+  });
+  const eklenecekler = Array.from(benzersizMap.values());
 
   const { error } = await supabase
     .from('proje_kalip_listesi')

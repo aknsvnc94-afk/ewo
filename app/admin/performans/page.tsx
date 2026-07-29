@@ -12,7 +12,7 @@ type Kayit = {
 
 type BaskiKaydi = { kalip_kodu: string; kalip_kodu_normalize: string; ay: string; yt_baski: number | null; guncel_baski_toplam: number; ariza_sayisi_manuel: number | null };
 
-type Sekme = 'mttr' | 'mtbf' | 'msbf' | 'proje-msbf' | 'duruslar';
+type Sekme = 'mttr' | 'mtbf' | 'msbf' | 'duruslar';
 
 function saniyeToOkunabilir(sn: number) {
   if (!sn || sn <= 0) return '0 dk';
@@ -255,6 +255,7 @@ export default function PerformansPage() {
   }, [tumVeri, kumulatifArizaSayaci, msbfAylikSonuclar]);
 
   const [genisletilenKalip, setGenisletilenKalip] = useState<string | null>(null);
+  const [msbfAltGrup, setMsbfAltGrup] = useState<'fompak_martur' | 'proje'>('fompak_martur');
 
   const [tabanBaski, setTabanBaski] = useState(6500757);
   const [tabanAriza, setTabanAriza] = useState(499);
@@ -562,7 +563,6 @@ export default function PerformansPage() {
         <button className={sekme === 'mttr' ? '' : 'secondary'} onClick={() => setSekme('mttr')}>MTTR</button>
         <button className={sekme === 'mtbf' ? '' : 'secondary'} onClick={() => setSekme('mtbf')}>MTBF</button>
         <button className={sekme === 'msbf' ? '' : 'secondary'} onClick={() => setSekme('msbf')}>MSBF (Kalıp)</button>
-        <button className={sekme === 'proje-msbf' ? '' : 'secondary'} onClick={() => setSekme('proje-msbf')}>MSBF (Proje Kalıpları)</button>
         <button className={sekme === 'duruslar' ? '' : 'secondary'} onClick={() => setSekme('duruslar')}>Arıza Duruş Süreleri</button>
       </div>
 
@@ -599,6 +599,16 @@ export default function PerformansPage() {
             {baskiMesaj && <p style={{ marginTop: 10 }}>{baskiMesaj}</p>}
           </div>
 
+          <div className="row" style={{ marginBottom: 4 }}>
+            <button className={msbfAltGrup === 'fompak_martur' ? '' : 'secondary'} onClick={() => setMsbfAltGrup('fompak_martur')}>
+              Fompak + Martur
+            </button>
+            <button className={msbfAltGrup === 'proje' ? '' : 'secondary'} onClick={() => setMsbfAltGrup('proje')}>
+              Proje Kalıpları
+            </button>
+          </div>
+
+          {msbfAltGrup === 'fompak_martur' && (
           <div className="card" style={{ borderColor: 'var(--accent)' }}>
             <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
               <div>
@@ -641,6 +651,7 @@ export default function PerformansPage() {
               </div>
             )}
           </div>
+          )}
 
           <details className="card">
             <summary style={{ cursor: 'pointer', fontWeight: 600 }}>🔍 Teşhis: EWO'daki KA Arızalarının Kalıp Kodları (Ham Veri)</summary>
@@ -687,6 +698,7 @@ export default function PerformansPage() {
             {gecmisMesaj && <p style={{ marginTop: 10 }}>{gecmisMesaj}</p>}
           </details>
 
+          {msbfAltGrup === 'fompak_martur' && (
           <div className="card" style={{ overflowX: 'auto' }}>
             <h3>Fompak + Martur — Kalıp Bazında Aylık Baskı ve MSBF Tablosu ({tumKalipListesi.length} kalıp)</h3>
             <p className="muted">
@@ -751,9 +763,10 @@ export default function PerformansPage() {
               </table>
             )}
           </div>
-        </>
-      ) : sekme === 'proje-msbf' ? (
-        <>
+          )}
+
+          {msbfAltGrup === 'proje' && (
+          <>
           <div className="card">
             <h3>Proje Kalıpları Üyelik Listesi Yükle</h3>
             <p className="muted">
@@ -866,6 +879,8 @@ export default function PerformansPage() {
               </table>
             )}
           </div>
+          </>
+          )}
         </>
       ) : yukleniyor ? <p className="muted">Yükleniyor...</p> : genelAdet === 0 ? (
         <div className="card"><p className="muted">Seçilen filtrelerde kayıt bulunamadı.</p></div>
