@@ -165,7 +165,7 @@ export default function PerformansPage() {
     const [yil, ayNo] = msbfAy.split('-').map(Number);
     const sayac: Record<string, number> = {};
     kayitlar.forEach((k) => {
-      if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic) return;
+      if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic || (k.sure_sn || 0) <= 1200) return; // sadece 20dk uzeri
       const t = new Date(k.baslangic);
       if (t.getFullYear() !== yil || t.getMonth() + 1 !== ayNo) return;
       const norm = kalipKoduNormalize(kalipKoduKismiCikar(k.kalip_kodu));
@@ -180,7 +180,7 @@ export default function PerformansPage() {
     const ayinSonu = new Date(yil, ayNo, 0, 23, 59, 59);
     const sayac: Record<string, number> = {};
     kayitlar.forEach((k) => {
-      if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic) return;
+      if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic || (k.sure_sn || 0) <= 1200) return; // sadece 20dk uzeri
       const t = new Date(k.baslangic);
       if (t > ayinSonu) return;
       const norm = kalipKoduNormalize(kalipKoduKismiCikar(k.kalip_kodu));
@@ -195,7 +195,7 @@ export default function PerformansPage() {
     const liste: { ham: string; normalize: string; adet: number }[] = [];
     const gruplar: Record<string, { ham: string; adet: number }> = {};
     kayitlar.forEach((k) => {
-      if (k.kategori !== 'KA' || !k.kalip_kodu) return;
+      if (k.kategori !== 'KA' || !k.kalip_kodu || (k.sure_sn || 0) <= 1200) return; // sadece 20dk uzeri
       const norm = kalipKoduNormalize(kalipKoduKismiCikar(k.kalip_kodu));
       if (!gruplar[norm]) gruplar[norm] = { ham: k.kalip_kodu, adet: 0 };
       gruplar[norm].adet += 1;
@@ -296,7 +296,7 @@ export default function PerformansPage() {
     function oAyinCanliArizaSayaci(yil: number, ayNo: number) {
       const sayac: Record<string, number> = {};
       kayitlar.forEach((k) => {
-        if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic) return;
+        if (k.kategori !== 'KA' || !k.kalip_kodu || !k.baslangic || (k.sure_sn || 0) <= 1200) return; // sadece 20dk uzeri
         const t = new Date(k.baslangic);
         if (t.getFullYear() !== yil || t.getMonth() + 1 !== ayNo) return;
         const norm = kalipKoduNormalize(kalipKoduKismiCikar(k.kalip_kodu));
@@ -554,7 +554,7 @@ export default function PerformansPage() {
           <details className="card">
             <summary style={{ cursor: 'pointer', fontWeight: 600 }}>🔍 Teşhis: EWO'daki KA Arızalarının Kalıp Kodları (Ham Veri)</summary>
             <p className="muted" style={{ marginTop: 10 }}>
-              Bu liste, EWO Arıza Kayıtları'ndaki (kategori=KA) kalıp kodu alanının <strong>tam olarak ne yazdığını</strong>
+              Bu liste, EWO Arıza Kayıtları'ndaki (kategori=KA, <strong>sadece 20 dakika üzeri</strong>) kalıp kodu alanının <strong>tam olarak ne yazdığını</strong>
               gösterir — baskı sayısı Excel'indeki kodlarla (örn. FOM001, FOM-008) karşılaştırıp format farkı olup
               olmadığını görebilirsiniz. Toplam {hamKalipKoduListesi.length} farklı kalıp kodu, tüm zamanlar.
             </p>

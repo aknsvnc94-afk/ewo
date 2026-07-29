@@ -2,6 +2,55 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { readSession } from '@/lib/session';
 
+// Sıra ne olursa olsun (örn. Haziran, Mayıs'tan ÖNCE yüklenmiş olsa bile) her
+// yüklemeden sonra çağrılır: ilgili kalıpların kayıtlı TÜM aylarını kronolojik
+// sıraya dizip, her ay için "bir önceki ayın kümülatif değeri" farkını yeniden
+// hesaplar ve gerekiyorsa günceller. Böylece geç gelen geçmiş veriler bile
+// daha sonradan doğru şekilde hesaba katılır.
+async function tumAylikDeltalariYenidenHesapla(
+  supabase: ReturnType<typeof supabaseAdmin>,
+  fabrikaId: string,
+  kalipKodlariNormalize: string[]
+) {
+  if (kalipKodlariNormalize.length === 0) return;
+
+  const { data: tumKayitlar } = await supabase
+    .from('kalip_baski_sayilari')
+    .select('id, kalip_kodu_normalize, ay, guncel_baski_toplam, yt_baski, ariza_sayisi_manuel')
+    .eq('fabrika_id', fabrikaId)
+    .in('kalip_kodu_normalize', kalipKodlariNormalize)
+    .order('ay', { ascending: true });
+
+  const gruplar: Record<string, typeof tumKayitlar> = {};
+  (tumKayitlar || []).forEach((k: any) => {
+    if (!gruplar[k.kalip_kodu_normalize]) gruplar[k.kalip_kodu_normalize] = [];
+    gruplar[k.kalip_kodu_normalize]!.push(k);
+  });
+
+  const guncellenecekler: { id: string; yt_baski: number | null }[] = [];
+  Object.values(gruplar).forEach((liste) => {
+    let oncekiGuncel: number | undefined;
+    (liste || []).forEach((kayit: any) => {
+      // Geçmiş ay içe aktarımından gelen (ariza_sayisi_manuel dolu) kayıtların
+      // yt_baski'si dosyadan doğrudan geldiği için burada YENİDEN HESAPLANMAZ —
+      // sadece canlı/aylık yüklemeden gelenler (ariza_sayisi_manuel boş) güncellenir.
+      const manuelMi = kayit.ariza_sayisi_manuel !== null && kayit.ariza_sayisi_manuel !== undefined;
+      if (!manuelMi) {
+        const yeniYtBaski = oncekiGuncel !== undefined ? kayit.guncel_baski_toplam - oncekiGuncel : null;
+        if (yeniYtBaski !== kayit.yt_baski) {
+          guncellenecekler.push({ id: kayit.id, yt_baski: yeniYtBaski });
+        }
+      }
+      oncekiGuncel = kayit.guncel_baski_toplam;
+    });
+  });
+
+  for (const g of guncellenecekler) {
+    await supabase.from('kalip_baski_sayilari').update({ yt_baski: g.yt_baski }).eq('id', g.id);
+  }
+}
+
+
 export async function GET(req: NextRequest) {
   const session = readSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
@@ -119,6 +168,11 @@ export async function POST(req: NextRequest) {
     .upsert(eklenecekler, { onConflict: 'fabrika_id,kalip_kodu_normalize,ay' });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Yükleme sırası ne olursa olsun (geç gelen geçmiş ay verisi dahil), etkilenen
+  // kalıpların TÜM aylarının farkını yeniden hesapla.
+  const etkilenenKodlar = Array.from(new Set(eklenecekler.map((k: any) => k.kalip_kodu_normalize)));
+  await tumAylikDeltalariYenidenHesapla(supabase, session.fabrikaId, etkilenenKodlar);
 
   return NextResponse.json({ ok: true, islenen: eklenecekler.length });
 }
