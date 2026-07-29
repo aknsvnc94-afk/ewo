@@ -68,7 +68,8 @@ export function parseBaskiBuffer(buf: ArrayBuffer): { kayitlar: BaskiKaydi[]; to
         guncel_baski_toplam: typeof baski === 'number' ? baski : Number(baski) || 0,
       };
     })
-    .filter((k) => k.kalip_kodu_normalize.length > 0);
+    // Sadece Fompak (FOM) ve Martur (MAR) kalıpları takip ediliyor
+    .filter((k) => k.kalip_kodu_normalize.startsWith('FOM') || k.kalip_kodu_normalize.startsWith('MAR'));
 
   return { kayitlar, toplamSatir: veriSatirlari.length };
 }

@@ -229,8 +229,40 @@ export default function PerformansPage() {
       });
   }, [tumVeri, kumulatifArizaSayaci, msbfAylikSonuclar]);
 
-  const [msbfGrup, setMsbfGrup] = useState<'tumu' | 'fommar'>('tumu');
   const [genisletilenKalip, setGenisletilenKalip] = useState<string | null>(null);
+
+  const [tabanBaski, setTabanBaski] = useState(6500757);
+  const [tabanAriza, setTabanAriza] = useState(499);
+  const [tabanAciklama, setTabanAciklama] = useState('Diğer aylardan gelen kümülatif toplam');
+  const [tabanDuzenleniyor, setTabanDuzenleniyor] = useState(false);
+  const [tabanKaydediliyor, setTabanKaydediliyor] = useState(false);
+
+  async function tabanDegerleriGetir() {
+    const res = await fetch('/api/msbf-taban');
+    const data = await res.json();
+    // Veritabanında henüz kayıtlı bir taban değer yoksa (0/0), sayfadaki
+    // varsayılan (önceden konuşulan) değerleri koru — üzerine yazma.
+    if (data.taban && (data.taban.taban_baski || data.taban.taban_ariza)) {
+      setTabanBaski(data.taban.taban_baski || 0);
+      setTabanAriza(data.taban.taban_ariza || 0);
+      setTabanAciklama(data.taban.aciklama || '');
+    }
+  }
+
+  useEffect(() => { tabanDegerleriGetir(); }, []);
+
+  async function tabanKaydet() {
+    setTabanKaydediliyor(true);
+    try {
+      await fetch('/api/msbf-taban', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taban_baski: tabanBaski, taban_ariza: tabanAriza, aciklama: tabanAciklama }),
+      });
+      setTabanDuzenleniyor(false);
+    } finally {
+      setTabanKaydediliyor(false);
+    }
+  }
 
   // Her kalıp için, o kalıba ait TÜM ayların (yüklü olan) ay bazlı baskı/arıza/MSBF
   // dökümü — satıra tıklayınca açılan detay için
@@ -270,25 +302,14 @@ export default function PerformansPage() {
     return map;
   }, [tumVeri, kayitlar]);
 
-  const msbfGoruntulenen = useMemo(() => {
-    if (msbfGrup === 'tumu') return msbfBirlesikSonuclar;
-    return msbfBirlesikSonuclar.filter((s) => s.kalip_kodu_normalize.startsWith('FOM') || s.kalip_kodu_normalize.startsWith('MAR'));
-  }, [msbfBirlesikSonuclar, msbfGrup]);
+  const msbfGoruntulenen = msbfBirlesikSonuclar; // artık her zaman sadece Fompak/Martur
 
   const genelOrtalamaMsbf = useMemo(() => {
     const gecerli = msbfBirlesikSonuclar.filter((s) => s.omurMsbf !== null);
-    const toplamBaski = gecerli.reduce((t, s) => t + s.omurBaski, 0);
-    const toplamAriza = gecerli.reduce((t, s) => t + s.omurArizaSayisi, 0);
+    const toplamBaski = gecerli.reduce((t, s) => t + s.omurBaski, 0) + tabanBaski;
+    const toplamAriza = gecerli.reduce((t, s) => t + s.omurArizaSayisi, 0) + tabanAriza;
     return toplamAriza > 0 ? toplamBaski / toplamAriza : null;
-  }, [msbfBirlesikSonuclar]);
-
-  const fomMarOrtalamaMsbf = useMemo(() => {
-    const fomMar = msbfBirlesikSonuclar.filter((s) => s.kalip_kodu_normalize.startsWith('FOM') || s.kalip_kodu_normalize.startsWith('MAR'));
-    const gecerli = fomMar.filter((s) => s.omurMsbf !== null);
-    const toplamBaski = gecerli.reduce((t, s) => t + s.omurBaski, 0);
-    const toplamAriza = gecerli.reduce((t, s) => t + s.omurArizaSayisi, 0);
-    return { adet: fomMar.length, msbf: toplamAriza > 0 ? toplamBaski / toplamAriza : null };
-  }, [msbfBirlesikSonuclar]);
+  }, [msbfBirlesikSonuclar, tabanBaski, tabanAriza]);
 
   // Teşhis: bu ay KA arızası olan ama baskı verisi hiç yüklenmemiş Fompak/Martur kalıp kodları
   // (sadece FOM/MAR gösteriliyor çünkü bu özellik yalnızca bu iki müşteri için kapsamlı)
@@ -443,6 +464,44 @@ export default function PerformansPage() {
             {baskiMesaj && <p style={{ marginTop: 10 }}>{baskiMesaj}</p>}
           </div>
 
+          <div className="card" style={{ borderColor: 'var(--accent)' }}>
+            <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 26, fontWeight: 700 }}>
+                  {genelOrtalamaMsbf !== null ? Math.round(genelOrtalamaMsbf).toLocaleString('tr-TR') : '-'}
+                </div>
+                <div className="muted">
+                  Genel Toplam MSBF (sistemdeki tüm kalıplar + taban değer, {msbfAy} itibarıyla)
+                </div>
+              </div>
+              <button className="secondary" onClick={() => setTabanDuzenleniyor(!tabanDuzenleniyor)}>
+                {tabanDuzenleniyor ? 'Kapat' : 'Taban Değeri Düzenle'}
+              </button>
+            </div>
+            {tabanDuzenleniyor && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                <p className="muted">
+                  Sistemde henüz kalıp bazında kaydı olmayan, diğer aylardan/kaynaklardan gelen kümülatif
+                  baskı ve arıza sayısını buraya girin — Genel Toplam MSBF'ye eklenir.
+                </p>
+                <div className="row" style={{ flexWrap: 'wrap' }}>
+                  <label className="muted">Taban Baskı Sayısı
+                    <input type="number" value={tabanBaski} onChange={(e) => setTabanBaski(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 160 }} />
+                  </label>
+                  <label className="muted">Taban Arıza Sayısı
+                    <input type="number" value={tabanAriza} onChange={(e) => setTabanAriza(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 120 }} />
+                  </label>
+                </div>
+                <label className="muted" style={{ display: 'block', marginTop: 8 }}>Açıklama (opsiyonel)
+                  <input value={tabanAciklama} onChange={(e) => setTabanAciklama(e.target.value)} placeholder="örn. Ocak-Nisan diğer kaynaklardan gelen toplam" style={{ display: 'block', marginTop: 4, width: '100%' }} />
+                </label>
+                <button style={{ marginTop: 10 }} onClick={tabanKaydet} disabled={tabanKaydediliyor}>
+                  {tabanKaydediliyor ? 'Kaydediliyor...' : 'Kaydet'}
+                </button>
+              </div>
+            )}
+          </div>
+
           <details className="card">
             <summary style={{ cursor: 'pointer', fontWeight: 600 }}>🔍 Teşhis: EWO'daki KA Arızalarının Kalıp Kodları (Ham Veri)</summary>
             <p className="muted" style={{ marginTop: 10 }}>
@@ -489,17 +548,7 @@ export default function PerformansPage() {
           </details>
 
           <div className="card">
-            <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-              <h3>{msbfAy} İtibarıyla Kalıp Bazında MSBF</h3>
-              <div className="row">
-                <button className={msbfGrup === 'tumu' ? '' : 'secondary'} onClick={() => setMsbfGrup('tumu')}>
-                  Tüm Kalıplar ({msbfBirlesikSonuclar.length})
-                </button>
-                <button className={msbfGrup === 'fommar' ? '' : 'secondary'} onClick={() => setMsbfGrup('fommar')}>
-                  Fompak + Martur ({fomMarOrtalamaMsbf.adet})
-                </button>
-              </div>
-            </div>
+            <h3>{msbfAy} İtibarıyla Fompak + Martur Kalıp Bazında MSBF ({msbfBirlesikSonuclar.length} kalıp)</h3>
             <p className="muted">
               Her kalıp için hem seçilen ayki hem ömür boyu (kümülatif) MSBF yan yana gösterilir.
               Düşük MSBF, o kalıbın daha az baskıda bir arıza yaptığını, yani daha sorunlu olduğunu gösterir.

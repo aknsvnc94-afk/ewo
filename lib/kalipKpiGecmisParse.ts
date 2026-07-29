@@ -1,74 +1,95 @@
 import * as XLSX from 'xlsx';
 import { kalipKoduNormalize } from './kalipBaskiParse';
 
-// "13- TÜM MFI KALIPLARI" sayfa düzeni: KALIP KODU sütunundan sonra her ay için
-// 4 sütunluk bir blok tekrarlanır: [Güncel Baskı, O Ay Gerçekleşen Baskı, Arıza Sayısı, MSBF]
-// OCAK bloğu G sütunundan (index 6, 0-tabanlı) başlar, her ay +4 sütun kayar.
+// Bu tür dosyalarda her ay için 4 sütunluk bir blok tekrarlanır:
+// [Güncel Baskı, O Ay Gerçekleşen Baskı, Arıza Sayısı, MSBF]
+// Sayfadan sayfaya (örn. "TÜM MFI KALIPLARI" ile "YENİ PROJE KALIPLARI")
+// sütun kaymaları farklı olabiliyor — bu yüzden "OCAK" yazan hücreyi bulup
+// oradan otomatik hizalanıyoruz (kalıp kodu sütunu her zaman OCAK bloğundan
+// 4 sütun önce geliyor).
 const AY_ISIMLERI = ['OCAK', 'ŞUBAT', 'MART', 'NİSAN', 'MAYIS', 'HAZİRAN', 'TEMMUZ', 'AĞUSTOS', 'EYLÜL', 'EKİM', 'KASIM', 'ARALIK'];
-const KALIP_KODU_SUTUN = 1;  // B sütunu (0-tabanlı index)
-const OCAK_BASLANGIC = 5;    // F sütunu (0-tabanlı index) — Güncel Baskı Sayısı
 const BLOK_GENISLIGI = 4;
+const KOD_OCAK_FARKI = 4;
 
 export type GecmisKayit = {
   kalip_kodu: string;
   kalip_kodu_normalize: string;
   ay: string; // 'YYYY-MM'
-  yt_baski: number;             // o ay gerçekleşen baskı sayısı (dosyada doğrudan verilmiş)
-  guncel_baski_toplam: number;  // o ay itibarıyla ERP'nin kümülatif değeri (dosyada doğrudan verilmiş)
+  yt_baski: number;
+  guncel_baski_toplam: number;
   ariza_sayisi_manuel: number;
 };
+
+function sayfaYapisiniBul(satirlar: any[][]): { ocakBaslangic: number; kalipKoduSutun: number; veriBaslangicSatir: number } | null {
+  for (let r = 0; r < Math.min(6, satirlar.length); r++) {
+    const row = satirlar[r];
+    if (!row) continue;
+    const ocakIdx = row.findIndex((v) => (v ?? '').toString().trim().toLocaleUpperCase('tr-TR') === 'OCAK');
+    if (ocakIdx !== -1) {
+      return { ocakBaslangic: ocakIdx, kalipKoduSutun: ocakIdx - KOD_OCAK_FARKI, veriBaslangicSatir: r + 2 };
+    }
+  }
+  return null;
+}
 
 export function parseGecmisKpiBuffer(
   buf: ArrayBuffer,
   yil: number
-): { kayitlar: GecmisKayit[]; kalipSayisi: number; hata?: string } {
+): { kayitlar: GecmisKayit[]; kalipSayisi: number; hata?: string; sayfaOzeti: string[] } {
   const wb = XLSX.read(buf, { type: 'array' });
-  const sheetName = wb.SheetNames.find((n) => n.toUpperCase().includes('MFI KALIPLARI')) || wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  const satirlar: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
-
-  if (satirlar.length < 4) {
-    return { kayitlar: [], kalipSayisi: 0, hata: 'Dosyada beklenen veri satırları bulunamadı' };
-  }
-
   const kayitlar: GecmisKayit[] = [];
-  let kalipSayisi = 0;
+  const gorulenKalipSet = new Set<string>();
+  const sayfaOzeti: string[] = [];
 
-  // Veri 4. satırdan (index 3) başlıyor (1-2. satır başlık, 3. satır alt başlık)
-  for (let r = 3; r < satirlar.length; r++) {
-    const row = satirlar[r];
-    if (!row) continue;
-    const kodHam = row[KALIP_KODU_SUTUN];
-    if (!kodHam) continue;
-    const norm = kalipKoduNormalize(kodHam);
-    if (!norm.startsWith('FOM') && !norm.startsWith('MAR')) continue; // sadece Fompak + Martur
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    const satirlar: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+    const yapi = sayfaYapisiniBul(satirlar);
+    if (!yapi) {
+      sayfaOzeti.push(`${sheetName}: aylık blok yapısı bulunamadı, atlandı`);
+      continue;
+    }
 
-    let buKalipDoluAySayisi = 0;
-    AY_ISIMLERI.forEach((_, ayIndex) => {
-      const base = OCAK_BASLANGIC + ayIndex * BLOK_GENISLIGI;
-      const guncelToplam = row[base];      // [base]=güncel (kümülatif)
-      const ayGerceklesen = row[base + 1]; // [base+1]=ay gerçekleşen, [base+2]=arıza, [base+3]=msbf
-      const arizaSayisi = row[base + 2];
-      if (ayGerceklesen === null && arizaSayisi === null) return; // bu ay için hiç veri yok, atla
+    let buSayfaKalip = 0;
+    for (let r = yapi.veriBaslangicSatir; r < satirlar.length; r++) {
+      const row = satirlar[r];
+      if (!row) continue;
+      const kodHam = row[yapi.kalipKoduSutun];
+      if (!kodHam) continue;
+      const norm = kalipKoduNormalize(kodHam);
+      if (!norm.startsWith('FOM') && !norm.startsWith('MAR')) continue; // sadece Fompak + Martur
 
-      const ayNo = ayIndex + 1;
-      kayitlar.push({
-        kalip_kodu: String(kodHam).trim(),
-        kalip_kodu_normalize: norm,
-        ay: `${yil}-${String(ayNo).padStart(2, '0')}`,
-        yt_baski: typeof ayGerceklesen === 'number' ? ayGerceklesen : Number(ayGerceklesen) || 0,
-        guncel_baski_toplam: typeof guncelToplam === 'number' ? guncelToplam : Number(guncelToplam) || 0,
-        ariza_sayisi_manuel: typeof arizaSayisi === 'number' ? arizaSayisi : Number(arizaSayisi) || 0,
+      let buKalipDoluAySayisi = 0;
+      AY_ISIMLERI.forEach((_, ayIndex) => {
+        const base = yapi.ocakBaslangic + ayIndex * BLOK_GENISLIGI;
+        const guncelToplam = row[base];
+        const ayGerceklesen = row[base + 1];
+        const arizaSayisi = row[base + 2];
+        if (ayGerceklesen === null && arizaSayisi === null) return;
+
+        const ayNo = ayIndex + 1;
+        kayitlar.push({
+          kalip_kodu: String(kodHam).trim(),
+          kalip_kodu_normalize: norm,
+          ay: `${yil}-${String(ayNo).padStart(2, '0')}`,
+          yt_baski: typeof ayGerceklesen === 'number' ? ayGerceklesen : Number(ayGerceklesen) || 0,
+          guncel_baski_toplam: typeof guncelToplam === 'number' ? guncelToplam : Number(guncelToplam) || 0,
+          ariza_sayisi_manuel: typeof arizaSayisi === 'number' ? arizaSayisi : Number(arizaSayisi) || 0,
+        });
+        buKalipDoluAySayisi++;
       });
-      buKalipDoluAySayisi++;
-    });
 
-    if (buKalipDoluAySayisi > 0) kalipSayisi++;
+      if (buKalipDoluAySayisi > 0) {
+        buSayfaKalip++;
+        gorulenKalipSet.add(norm);
+      }
+    }
+    sayfaOzeti.push(`${sheetName}: ${buSayfaKalip} kalıp (kod sütunu ${yapi.kalipKoduSutun}, Ocak bloğu ${yapi.ocakBaslangic})`);
   }
 
   if (kayitlar.length === 0) {
-    return { kayitlar: [], kalipSayisi: 0, hata: 'Fompak/Martur kalıpları için dolu ay verisi bulunamadı' };
+    return { kayitlar: [], kalipSayisi: 0, hata: 'Fompak/Martur kalıpları için dolu ay verisi bulunamadı', sayfaOzeti };
   }
 
-  return { kayitlar, kalipSayisi };
+  return { kayitlar, kalipSayisi: gorulenKalipSet.size, sayfaOzeti };
 }
