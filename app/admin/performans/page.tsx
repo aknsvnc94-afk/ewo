@@ -291,7 +291,7 @@ export default function PerformansPage() {
   // Her kalıp için, o kalıba ait TÜM ayların (yüklü olan) ay bazlı baskı/arıza/MSBF
   // dökümü — satıra tıklayınca açılan detay için
   const kalipAylikGecmisMap = useMemo(() => {
-    const map: Record<string, { ay: string; baski: number | null; ariza: number; msbf: number | null }[]> = {};
+    const map: Record<string, { ay: string; guncel: number; baski: number | null; ariza: number; msbf: number | null; kalip_kodu: string }[]> = {};
 
     function oAyinCanliArizaSayaci(yil: number, ayNo: number) {
       const sayac: Record<string, number> = {};
@@ -318,13 +318,22 @@ export default function PerformansPage() {
         const ariza = b.ariza_sayisi_manuel ?? (canliSayac[b.kalip_kodu_normalize] || 0);
         const msbf = b.yt_baski !== null && ariza > 0 ? b.yt_baski / ariza : null;
         if (!map[b.kalip_kodu_normalize]) map[b.kalip_kodu_normalize] = [];
-        map[b.kalip_kodu_normalize].push({ ay, baski: b.yt_baski, ariza, msbf });
+        map[b.kalip_kodu_normalize].push({ ay, guncel: b.guncel_baski_toplam ?? 0, baski: b.yt_baski, ariza, msbf, kalip_kodu: b.kalip_kodu });
       });
     });
 
     Object.values(map).forEach((liste) => liste.sort((a, b) => a.ay.localeCompare(b.ay)));
     return map;
   }, [tumVeri, kayitlar]);
+
+  // Tabloda satır olarak gösterilecek tüm kalıp kodları (herhangi bir ayda veri yüklenmiş olan)
+  const tumKalipListesi = useMemo(() => {
+    const adMap: Record<string, string> = {};
+    tumVeri.forEach((b) => { adMap[b.kalip_kodu_normalize] = b.kalip_kodu; });
+    return Object.entries(adMap)
+      .map(([norm, kod]) => ({ norm, kod }))
+      .sort((a, b) => a.kod.localeCompare(b.kod));
+  }, [tumVeri]);
 
   const msbfGoruntulenen = msbfBirlesikSonuclar; // artık her zaman sadece Fompak/Martur
 
@@ -587,68 +596,66 @@ export default function PerformansPage() {
             {gecmisMesaj && <p style={{ marginTop: 10 }}>{gecmisMesaj}</p>}
           </details>
 
-          <div className="card">
-            <h3>{msbfAy} İtibarıyla Fompak + Martur Kalıp Bazında MSBF ({msbfBirlesikSonuclar.length} kalıp)</h3>
+          <div className="card" style={{ overflowX: 'auto' }}>
+            <h3>Fompak + Martur — Kalıp Bazında Aylık Baskı ve MSBF Tablosu ({tumKalipListesi.length} kalıp)</h3>
             <p className="muted">
-              Her kalıp için hem seçilen ayki hem ömür boyu (kümülatif) MSBF yan yana gösterilir.
-              Düşük MSBF, o kalıbın daha az baskıda bir arıza yaptığını, yani daha sorunlu olduğunu gösterir.
+              Sol taraf: her ayın ERP'den yüklenen ham kümülatif baskı sayısı, ay ay yan yana ilerler.
+              Sağ taraf: ikinci aydan itibaren, bir önceki ayın kümülatif değeri çıkarılarak hesaplanan
+              o ayki gerçek baskı sayısı, arıza sayısı ve MSBF.
             </p>
-            {msbfGoruntulenen.length === 0 ? (
-              <p className="muted">Bu grup için henüz baskı sayısı yüklenmedi.</p>
+            {tumKalipListesi.length === 0 || mevcutAylar.length === 0 ? (
+              <p className="muted">Henüz baskı sayısı yüklenmedi.</p>
             ) : (
-              <table>
+              <table style={{ minWidth: 700 }}>
                 <thead>
                   <tr>
-                    <th>Kalıp Kodu</th>
-                    <th>{msbfAy} Baskı</th><th>{msbfAy} Arıza</th><th>{msbfAy} MSBF</th>
-                    <th>Ömür Boyu Baskı</th><th>Ömür Boyu Arıza</th><th>Ömür Boyu MSBF</th>
-                    <th>Kaynak</th>
+                    <th rowSpan={2} style={{ verticalAlign: 'bottom' }}>Kalıp Kodu</th>
+                    <th colSpan={mevcutAylar.length} style={{ textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+                      ERP Baskı Sayıları (Kümülatif)
+                    </th>
+                    {mevcutAylar.slice(1).map((ay) => (
+                      <th key={ay} colSpan={3} style={{ textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+                        {ay} Aylık Hesaplanan
+                      </th>
+                    ))}
+                  </tr>
+                  <tr>
+                    {mevcutAylar.map((ay) => <th key={ay}>{ay}</th>)}
+                    {mevcutAylar.slice(1).map((ay) => (
+                      <React.Fragment key={ay}>
+                        <th>Baskı</th><th>Arıza</th><th>MSBF</th>
+                      </React.Fragment>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {msbfGoruntulenen.map((s) => (
-                    <React.Fragment key={s.kalip_kodu_normalize}>
-                      <tr
-                        onClick={() => setGenisletilenKalip(genisletilenKalip === s.kalip_kodu_normalize ? null : s.kalip_kodu_normalize)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <td>{genisletilenKalip === s.kalip_kodu_normalize ? '▾ ' : '▸ '}{s.kalip_kodu}</td>
-                        <td>{s.ayBaskisi !== null ? s.ayBaskisi.toLocaleString('tr-TR') : <span className="muted">Veri yok</span>}</td>
-                        <td>{s.ayArizaSayisi}</td>
-                        <td className={s.ayArizaSayisi > 0 ? '' : 'muted'}>
-                          {s.ayMsbf !== null ? Math.round(s.ayMsbf).toLocaleString('tr-TR') : '-'}
-                        </td>
-                        <td>{s.omurBaski.toLocaleString('tr-TR')}</td>
-                        <td>{s.omurArizaSayisi}</td>
-                        <td className={s.omurArizaSayisi > 0 ? '' : 'muted'}>
-                          {s.omurMsbf !== null ? Math.round(s.omurMsbf).toLocaleString('tr-TR') : 'Arıza yok'}
-                        </td>
-                        <td className="muted" style={{ fontSize: 12 }}>{s.kaynak}</td>
-                      </tr>
-                      {genisletilenKalip === s.kalip_kodu_normalize && (
-                        <tr>
-                          <td colSpan={8} style={{ background: 'var(--panel-2)' }}>
-                            <strong style={{ fontSize: 13 }}>{s.kalip_kodu} — Aylık MSBF Geçmişi (kümülatif olarak artar)</strong>
-                            <table style={{ marginTop: 8 }}>
-                              <thead><tr><th>Ay</th><th>O Ay Baskı</th><th>O Ay Arıza</th><th>O Ay MSBF</th></tr></thead>
-                              <tbody>
-                                {(kalipAylikGecmisMap[s.kalip_kodu_normalize] || []).map((g) => (
-                                  <tr key={g.ay}>
-                                    <td>{g.ay}</td>
-                                    <td>{g.baski !== null ? g.baski.toLocaleString('tr-TR') : <span className="muted">İlk ay, veri yok</span>}</td>
-                                    <td>{g.ariza}</td>
-                                    <td className={g.ariza > 0 ? '' : 'muted'}>
-                                      {g.msbf !== null ? Math.round(g.msbf).toLocaleString('tr-TR') : '-'}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                  {tumKalipListesi.map(({ norm, kod }) => {
+                    const gecmis = kalipAylikGecmisMap[norm] || [];
+                    const ayMap: Record<string, { guncel: number; baski: number | null; ariza: number; msbf: number | null }> = {};
+                    gecmis.forEach((g) => { ayMap[g.ay] = g; });
+                    return (
+                      <tr key={norm}>
+                        <td>{kod}</td>
+                        {mevcutAylar.map((ay) => (
+                          <td key={ay}>
+                            {ayMap[ay] ? ayMap[ay].guncel.toLocaleString('tr-TR') : <span className="muted">-</span>}
                           </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
+                        ))}
+                        {mevcutAylar.slice(1).map((ay) => {
+                          const g = ayMap[ay];
+                          return (
+                            <React.Fragment key={ay}>
+                              <td>{g && g.baski !== null ? g.baski.toLocaleString('tr-TR') : <span className="muted">-</span>}</td>
+                              <td>{g ? g.ariza : <span className="muted">-</span>}</td>
+                              <td className={g && g.ariza > 0 ? '' : 'muted'}>
+                                {g && g.msbf !== null ? Math.round(g.msbf).toLocaleString('tr-TR') : '-'}
+                              </td>
+                            </React.Fragment>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
