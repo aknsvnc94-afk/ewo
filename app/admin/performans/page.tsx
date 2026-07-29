@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { parseBaskiBuffer, kalipKoduNormalize, kalipKoduKismiCikar } from '@/lib/kalipBaskiParse';
 import { parseGecmisKpiBuffer } from '@/lib/kalipKpiGecmisParse';
+import { parseProjeKalipListesi } from '@/lib/projeKalipListesiParse';
 
 type Kayit = {
   id: string; tezgah: string; kategori: string; baslangic: string; sure_sn: number;
@@ -11,7 +12,7 @@ type Kayit = {
 
 type BaskiKaydi = { kalip_kodu: string; kalip_kodu_normalize: string; ay: string; yt_baski: number | null; guncel_baski_toplam: number; ariza_sayisi_manuel: number | null };
 
-type Sekme = 'mttr' | 'mtbf' | 'msbf' | 'duruslar';
+type Sekme = 'mttr' | 'mtbf' | 'msbf' | 'proje-msbf' | 'duruslar';
 
 function saniyeToOkunabilir(sn: number) {
   if (!sn || sn <= 0) return '0 dk';
@@ -280,11 +281,79 @@ export default function PerformansPage() {
     try {
       await fetch('/api/msbf-taban', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taban_baski: tabanBaski, taban_ariza: tabanAriza, aciklama: tabanAciklama }),
+        body: JSON.stringify({ taban_baski: tabanBaski, taban_ariza: tabanAriza, aciklama: tabanAciklama, grup: 'fompak_martur' }),
       });
       setTabanDuzenleniyor(false);
     } finally {
       setTabanKaydediliyor(false);
+    }
+  }
+
+  // --- Proje Kalıpları (ayrı grup) ---
+  const [projeKalipSet, setProjeKalipSet] = useState<Set<string>>(new Set());
+  const [projeListeYukleniyor, setProjeListeYukleniyor] = useState(false);
+  const [projeListeMesaj, setProjeListeMesaj] = useState('');
+
+  const [projeTabanBaski, setProjeTabanBaski] = useState(2831234);
+  const [projeTabanAriza, setProjeTabanAriza] = useState(288);
+  const [projeTabanAciklama, setProjeTabanAciklama] = useState('Diğer aylardan gelen kümülatif toplam (Proje Kalıpları)');
+  const [projeTabanDuzenleniyor, setProjeTabanDuzenleniyor] = useState(false);
+  const [projeTabanKaydediliyor, setProjeTabanKaydediliyor] = useState(false);
+
+  async function projeListesiGetir() {
+    const res = await fetch('/api/proje-kalip-listesi');
+    const data = await res.json();
+    const liste = data.kalipListesi || [];
+    if (liste.length > 0) setProjeKalipSet(new Set(liste.map((k: any) => k.kalip_kodu_normalize)));
+  }
+
+  async function projeTabanGetir() {
+    const res = await fetch('/api/msbf-taban?grup=proje_kalip');
+    const data = await res.json();
+    if (data.taban && (data.taban.taban_baski || data.taban.taban_ariza)) {
+      setProjeTabanBaski(data.taban.taban_baski || 0);
+      setProjeTabanAriza(data.taban.taban_ariza || 0);
+      setProjeTabanAciklama(data.taban.aciklama || '');
+    }
+  }
+
+  useEffect(() => { projeListesiGetir(); projeTabanGetir(); }, []);
+
+  async function projeTabanKaydet() {
+    setProjeTabanKaydediliyor(true);
+    try {
+      await fetch('/api/msbf-taban', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taban_baski: projeTabanBaski, taban_ariza: projeTabanAriza, aciklama: projeTabanAciklama, grup: 'proje_kalip' }),
+      });
+      setProjeTabanDuzenleniyor(false);
+    } finally {
+      setProjeTabanKaydediliyor(false);
+    }
+  }
+
+  async function projeListeDosyaYukle(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setProjeListeYukleniyor(true);
+    setProjeListeMesaj('Dosya okunuyor...');
+    try {
+      const buf = await file.arrayBuffer();
+      const { kayitlar, hata } = parseProjeKalipListesi(buf);
+      if (hata) { setProjeListeMesaj(`Hata: ${hata}`); return; }
+      const res = await fetch('/api/proje-kalip-listesi', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kalipListesi: kayitlar }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setProjeListeMesaj(`Hata: ${data.error}`); return; }
+      setProjeListeMesaj(`✓ ${data.islenen} kalıp "Proje Kalıpları" grubuna kaydedildi`);
+      projeListesiGetir();
+    } catch (err: any) {
+      setProjeListeMesaj(`Hata: Dosya okunamadı (${err?.message || 'bilinmeyen hata'})`);
+    } finally {
+      setProjeListeYukleniyor(false);
+      e.target.value = '';
     }
   }
 
@@ -334,6 +403,27 @@ export default function PerformansPage() {
       .map(([norm, kod]) => ({ norm, kod }))
       .sort((a, b) => a.kod.localeCompare(b.kod));
   }, [tumVeri]);
+
+  // Proje Kalıpları grubuna ait olanlar (yüklenen üyelik listesiyle filtrelenmiş)
+  const projeKalipListesi = useMemo(() => {
+    return tumKalipListesi.filter((k) => projeKalipSet.has(k.norm));
+  }, [tumKalipListesi, projeKalipSet]);
+
+  const projeGenelOrtalamaMsbf = useMemo(() => {
+    let toplamAyBaski = 0, toplamAyAriza = 0;
+    projeKalipListesi.forEach(({ norm }) => {
+      const gecmis = kalipAylikGecmisMap[norm] || [];
+      const enSonAy = mevcutAylar[mevcutAylar.length - 1];
+      const g = gecmis.find((x) => x.ay === enSonAy);
+      if (g) {
+        toplamAyBaski += g.baski ?? 0;
+        toplamAyAriza += g.ariza;
+      }
+    });
+    const toplamBaski = toplamAyBaski + projeTabanBaski;
+    const toplamAriza = toplamAyAriza + projeTabanAriza;
+    return { toplamBaski, toplamAriza, msbf: toplamAriza > 0 ? toplamBaski / toplamAriza : null };
+  }, [projeKalipListesi, kalipAylikGecmisMap, mevcutAylar, projeTabanBaski, projeTabanAriza]);
 
   const msbfGoruntulenen = msbfBirlesikSonuclar; // artık her zaman sadece Fompak/Martur
 
@@ -472,6 +562,7 @@ export default function PerformansPage() {
         <button className={sekme === 'mttr' ? '' : 'secondary'} onClick={() => setSekme('mttr')}>MTTR</button>
         <button className={sekme === 'mtbf' ? '' : 'secondary'} onClick={() => setSekme('mtbf')}>MTBF</button>
         <button className={sekme === 'msbf' ? '' : 'secondary'} onClick={() => setSekme('msbf')}>MSBF (Kalıp)</button>
+        <button className={sekme === 'proje-msbf' ? '' : 'secondary'} onClick={() => setSekme('proje-msbf')}>MSBF (Proje Kalıpları)</button>
         <button className={sekme === 'duruslar' ? '' : 'secondary'} onClick={() => setSekme('duruslar')}>Arıza Duruş Süreleri</button>
       </div>
 
@@ -630,6 +721,121 @@ export default function PerformansPage() {
                 </thead>
                 <tbody>
                   {tumKalipListesi.map(({ norm, kod }) => {
+                    const gecmis = kalipAylikGecmisMap[norm] || [];
+                    const ayMap: Record<string, { guncel: number; baski: number | null; ariza: number; msbf: number | null }> = {};
+                    gecmis.forEach((g) => { ayMap[g.ay] = g; });
+                    return (
+                      <tr key={norm}>
+                        <td>{kod}</td>
+                        {mevcutAylar.map((ay) => (
+                          <td key={ay}>
+                            {ayMap[ay] ? ayMap[ay].guncel.toLocaleString('tr-TR') : <span className="muted">-</span>}
+                          </td>
+                        ))}
+                        {mevcutAylar.slice(1).map((ay) => {
+                          const g = ayMap[ay];
+                          return (
+                            <React.Fragment key={ay}>
+                              <td>{g && g.baski !== null ? g.baski.toLocaleString('tr-TR') : <span className="muted">-</span>}</td>
+                              <td>{g ? g.ariza : <span className="muted">-</span>}</td>
+                              <td className={g && g.ariza > 0 ? '' : 'muted'}>
+                                {g && g.msbf !== null ? Math.round(g.msbf).toLocaleString('tr-TR') : '-'}
+                              </td>
+                            </React.Fragment>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      ) : sekme === 'proje-msbf' ? (
+        <>
+          <div className="card">
+            <h3>Proje Kalıpları Üyelik Listesi Yükle</h3>
+            <p className="muted">
+              Hangi kalıp kodlarının "Yeni Proje Kalıpları" grubuna dahil olduğunu tanımlayan listeyi (Kalıp Kodu + Kalıp Adı, başlıksız) yükleyin.
+              Baskı/arıza verisi ayrıca yüklemenize gerek yok — üstteki "MSBF (Kalıp)" sekmesinde yüklediğiniz aylık veriler otomatik kullanılır.
+            </p>
+            <input type="file" accept=".xlsx,.xls" onChange={projeListeDosyaYukle} disabled={projeListeYukleniyor} />
+            {projeListeMesaj && <p style={{ marginTop: 10 }}>{projeListeMesaj}</p>}
+            {projeKalipSet.size > 0 && <p className="muted" style={{ marginTop: 10 }}>Şu an {projeKalipSet.size} kalıp bu grupta tanımlı.</p>}
+          </div>
+
+          <div className="card" style={{ borderColor: 'var(--accent)' }}>
+            <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 26, fontWeight: 700 }}>
+                  {projeGenelOrtalamaMsbf.msbf !== null ? Math.round(projeGenelOrtalamaMsbf.msbf).toLocaleString('tr-TR') : '-'}
+                </div>
+                <div className="muted">
+                  Proje Kalıpları Genel Toplam MSBF ({mevcutAylar[mevcutAylar.length - 1] || '-'} itibarıyla) = Taban Değer + O Ayda Oluşan Toplam
+                </div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  {projeGenelOrtalamaMsbf.toplamBaski.toLocaleString('tr-TR')} baskı / {projeGenelOrtalamaMsbf.toplamAriza.toLocaleString('tr-TR')} arıza
+                  {' '}(Taban: {projeTabanBaski.toLocaleString('tr-TR')} baskı / {projeTabanAriza.toLocaleString('tr-TR')} arıza)
+                </div>
+              </div>
+              <button className="secondary" onClick={() => setProjeTabanDuzenleniyor(!projeTabanDuzenleniyor)}>
+                {projeTabanDuzenleniyor ? 'Kapat' : 'Taban Değeri Düzenle'}
+              </button>
+            </div>
+            {projeTabanDuzenleniyor && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                <div className="row" style={{ flexWrap: 'wrap' }}>
+                  <label className="muted">Taban Baskı Sayısı
+                    <input type="number" value={projeTabanBaski} onChange={(e) => setProjeTabanBaski(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 160 }} />
+                  </label>
+                  <label className="muted">Taban Arıza Sayısı
+                    <input type="number" value={projeTabanAriza} onChange={(e) => setProjeTabanAriza(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 120 }} />
+                  </label>
+                </div>
+                <label className="muted" style={{ display: 'block', marginTop: 8 }}>Açıklama (opsiyonel)
+                  <input value={projeTabanAciklama} onChange={(e) => setProjeTabanAciklama(e.target.value)} style={{ display: 'block', marginTop: 4, width: '100%' }} />
+                </label>
+                <button style={{ marginTop: 10 }} onClick={projeTabanKaydet} disabled={projeTabanKaydediliyor}>
+                  {projeTabanKaydediliyor ? 'Kaydediliyor...' : 'Kaydet'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ overflowX: 'auto' }}>
+            <h3>Proje Kalıpları — Aylık Baskı ve MSBF Tablosu ({projeKalipListesi.length} kalıp)</h3>
+            {projeKalipListesi.length === 0 || mevcutAylar.length === 0 ? (
+              <p className="muted">
+                {projeKalipSet.size === 0
+                  ? 'Önce yukarıdan proje kalıpları üyelik listesini yükleyin.'
+                  : 'Bu gruptaki kalıplar için henüz baskı sayısı yüklenmedi.'}
+              </p>
+            ) : (
+              <table style={{ minWidth: 700 }}>
+                <thead>
+                  <tr>
+                    <th rowSpan={2} style={{ verticalAlign: 'bottom' }}>Kalıp Kodu</th>
+                    <th colSpan={mevcutAylar.length} style={{ textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+                      ERP Baskı Sayıları (Kümülatif)
+                    </th>
+                    {mevcutAylar.slice(1).map((ay) => (
+                      <th key={ay} colSpan={3} style={{ textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+                        {ay} Aylık Hesaplanan
+                      </th>
+                    ))}
+                  </tr>
+                  <tr>
+                    {mevcutAylar.map((ay) => <th key={ay}>{ay}</th>)}
+                    {mevcutAylar.slice(1).map((ay) => (
+                      <React.Fragment key={ay}>
+                        <th>Baskı</th><th>Arıza</th><th>MSBF</th>
+                      </React.Fragment>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {projeKalipListesi.map(({ norm, kod }) => {
                     const gecmis = kalipAylikGecmisMap[norm] || [];
                     const ayMap: Record<string, { guncel: number; baski: number | null; ariza: number; msbf: number | null }> = {};
                     gecmis.forEach((g) => { ayMap[g.ay] = g; });
