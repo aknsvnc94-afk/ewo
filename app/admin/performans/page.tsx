@@ -64,7 +64,28 @@ export default function PerformansPage() {
     setTumVeri(tumData.kayitlar || []);
   }
 
+  const [mevcutAylar, setMevcutAylar] = useState<string[]>([]);
+
   useEffect(() => { verileriGetir(msbfAy); }, [msbfAy]);
+
+  async function mevcutAylariGuncelle(otomatikSecEnSonAy = false) {
+    const res = await fetch('/api/kalip-baski?ayaKadar=2099-12');
+    const data = await res.json();
+    const tumKayitlar: BaskiKaydi[] = data.kayitlar || [];
+    if (tumKayitlar.length > 0) {
+      const aylar = Array.from(new Set(tumKayitlar.map((k) => k.ay))).sort();
+      setMevcutAylar(aylar);
+      if (otomatikSecEnSonAy) setMsbfAy(aylar[aylar.length - 1]);
+    }
+  }
+
+  // Sayfa ilk açıldığında, bugünün takvim ayı yerine SİSTEMDE KAYITLI EN SON ayı
+  // otomatik seçer — böylece yükleme yapılıp sayfa yenilendiğinde veri "kaybolmuş"
+  // gibi görünmez (sadece farklı bir aya bakılmış olur). Ayrıca mevcut ay listesini de doldurur.
+  useEffect(() => {
+    mevcutAylariGuncelle(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function baskiDosyaYukle(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -88,6 +109,7 @@ export default function PerformansPage() {
       if (!res.ok) { setBaskiMesaj(`Hata: ${data.error}`); return; }
       setBaskiMesaj(`✓ ${data.islenen} kalıbın ${msbfAy} ayı verisi kaydedildi (o ayki baskı, bir önceki ayın kümülatif değeriyle farkı alınarak hesaplandı)`);
       verileriGetir(msbfAy);
+      mevcutAylariGuncelle();
     } catch (err: any) {
       setBaskiMesaj(`Hata: Dosya okunamadı (${err?.message || 'bilinmeyen hata'})`);
     } finally {
@@ -114,6 +136,7 @@ export default function PerformansPage() {
       if (!res.ok) { setGecmisMesaj(`Hata: ${data.error}`); return; }
       setGecmisMesaj(`✓ ${kalipSayisi} kalıbın geçmiş ay verileri (${data.islenen} kayıt) içe aktarıldı`);
       verileriGetir(msbfAy);
+      mevcutAylariGuncelle();
     } catch (err: any) {
       setGecmisMesaj(`Hata: Dosya okunamadı (${err?.message || 'bilinmeyen hata'})`);
     } finally {
@@ -131,6 +154,7 @@ export default function PerformansPage() {
       if (!res.ok) { setBaskiMesaj(`Hata: ${data.error}`); return; }
       setBaskiMesaj(`✓ ${data.silinen} kayıt silindi`);
       verileriGetir(msbfAy);
+      mevcutAylariGuncelle();
     } finally {
       setTemizleniyor(false);
     }
@@ -457,9 +481,17 @@ export default function PerformansPage() {
               farkı alınarak otomatik hesaplanır.
             </p>
             <div className="row" style={{ flexWrap: 'wrap' }}>
-              <label className="muted">Ay
+              <label className="muted">Yükleme/Görüntüleme Ayı
                 <input type="month" value={msbfAy} onChange={(e) => setMsbfAy(e.target.value)} style={{ display: 'block', marginTop: 4 }} />
               </label>
+              {mevcutAylar.length > 0 && (
+                <label className="muted">Veya Mevcut Aylardan Seç
+                  <select value={mevcutAylar.includes(msbfAy) ? msbfAy : ''} onChange={(e) => setMsbfAy(e.target.value)} style={{ display: 'block', marginTop: 4 }}>
+                    <option value="" disabled>Ay seçin...</option>
+                    {mevcutAylar.map((ay) => <option key={ay} value={ay}>{ay}</option>)}
+                  </select>
+                </label>
+              )}
               <label className="muted">Dosya
                 <input type="file" accept=".xlsx,.xls" onChange={baskiDosyaYukle} disabled={baskiYukleniyor} style={{ display: 'block', marginTop: 4 }} />
               </label>
