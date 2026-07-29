@@ -604,7 +604,7 @@ export default function PerformansPage() {
               Fompak + Martur
             </button>
             <button className={msbfAltGrup === 'proje' ? '' : 'secondary'} onClick={() => setMsbfAltGrup('proje')}>
-              Proje Kalıpları
+              Martur-Fompak Proje Kalıpları
             </button>
           </div>
 
@@ -652,51 +652,6 @@ export default function PerformansPage() {
             )}
           </div>
           )}
-
-          <details className="card">
-            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>🔍 Teşhis: EWO'daki KA Arızalarının Kalıp Kodları (Ham Veri)</summary>
-            <p className="muted" style={{ marginTop: 10 }}>
-              Bu liste, EWO Arıza Kayıtları'ndaki (kategori=KA, <strong>sadece 20 dakika üzeri</strong>) kalıp kodu alanının <strong>tam olarak ne yazdığını</strong>
-              gösterir — baskı sayısı Excel'indeki kodlarla (örn. FOM001, FOM-008) karşılaştırıp format farkı olup
-              olmadığını görebilirsiniz. Toplam {hamKalipKoduListesi.length} farklı kalıp kodu, tüm zamanlar.
-            </p>
-            {hamKalipKoduListesi.length === 0 ? (
-              <p className="muted" style={{ color: 'var(--danger)' }}>
-                EWO'da hiç KA (Kalıp Arızası) kaydı bulunamadı — ya hiç arıza yüklenmemiş ya da hiçbirinde kalıp kodu alanı dolu değil.
-              </p>
-            ) : (
-              <table>
-                <thead><tr><th>Ham Kalıp Kodu (EWO'daki hali)</th><th>Normalize Edilmiş Hali</th><th>Arıza Sayısı</th></tr></thead>
-                <tbody>
-                  {hamKalipKoduListesi.slice(0, 50).map((h) => (
-                    <tr key={h.normalize}>
-                      <td style={{ fontFamily: 'monospace' }}>{h.ham}</td>
-                      <td style={{ fontFamily: 'monospace' }} className="muted">{h.normalize}</td>
-                      <td>{h.adet}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {hamKalipKoduListesi.length > 50 && <p className="muted">...ve {hamKalipKoduListesi.length - 50} tane daha (sadece ilk 50 gösteriliyor)</p>}
-          </details>
-
-          <details className="card">
-            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Geçmiş Ay Verilerini Toplu İçe Aktar (Ocak-Mayıs vb.)</summary>
-            <p className="muted" style={{ marginTop: 10 }}>
-              İlk KPI dosyanız gibi aylık blok yapılı bir Excel'den, sadece Fompak (FOM) ve Martur (MAR) kalıplarının
-              dolu olan aylarını (o ay gerçekleşen baskı, güncel kümülatif baskı ve arıza sayısı) toplu olarak içe aktarır.
-            </p>
-            <div className="row" style={{ flexWrap: 'wrap' }}>
-              <label className="muted">Yıl
-                <input type="number" value={gecmisYil} onChange={(e) => setGecmisYil(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 100 }} />
-              </label>
-              <label className="muted">Dosya
-                <input type="file" accept=".xlsx,.xls" onChange={gecmisDosyaYukle} disabled={gecmisYukleniyor} style={{ display: 'block', marginTop: 4 }} />
-              </label>
-            </div>
-            {gecmisMesaj && <p style={{ marginTop: 10 }}>{gecmisMesaj}</p>}
-          </details>
 
           {msbfAltGrup === 'fompak_martur' && (
           <div className="card" style={{ overflowX: 'auto' }}>
@@ -768,7 +723,7 @@ export default function PerformansPage() {
           {msbfAltGrup === 'proje' && (
           <>
           <div className="card">
-            <h3>Proje Kalıpları Üyelik Listesi Yükle</h3>
+            <h3>Martur-Fompak Proje Kalıpları Üyelik Listesi Yükle</h3>
             <p className="muted">
               Hangi kalıp kodlarının "Yeni Proje Kalıpları" grubuna dahil olduğunu tanımlayan listeyi (Kalıp Kodu + Kalıp Adı, başlıksız) yükleyin.
               Baskı/arıza verisi ayrıca yüklemenize gerek yok — üstteki "MSBF (Kalıp)" sekmesinde yüklediğiniz aylık veriler otomatik kullanılır.
@@ -785,7 +740,7 @@ export default function PerformansPage() {
                   {projeGenelOrtalamaMsbf.msbf !== null ? Math.round(projeGenelOrtalamaMsbf.msbf).toLocaleString('tr-TR') : '-'}
                 </div>
                 <div className="muted">
-                  Proje Kalıpları Genel Toplam MSBF ({mevcutAylar[mevcutAylar.length - 1] || '-'} itibarıyla) = Taban Değer + O Ayda Oluşan Toplam
+                  Martur-Fompak Proje Kalıpları Genel Toplam MSBF ({mevcutAylar[mevcutAylar.length - 1] || '-'} itibarıyla) = Taban Değer + O Ayda Oluşan Toplam
                 </div>
                 <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                   {projeGenelOrtalamaMsbf.toplamBaski.toLocaleString('tr-TR')} baskı / {projeGenelOrtalamaMsbf.toplamAriza.toLocaleString('tr-TR')} arıza
@@ -817,7 +772,7 @@ export default function PerformansPage() {
           </div>
 
           <div className="card" style={{ overflowX: 'auto' }}>
-            <h3>Proje Kalıpları — Aylık Baskı ve MSBF Tablosu ({projeKalipListesi.length} kalıp)</h3>
+            <h3>Martur-Fompak Proje Kalıpları — Aylık Baskı ve MSBF Tablosu ({projeKalipListesi.length} kalıp)</h3>
             {projeKalipListesi.length === 0 || mevcutAylar.length === 0 ? (
               <p className="muted">
                 {projeKalipSet.size === 0
