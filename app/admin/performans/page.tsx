@@ -304,11 +304,14 @@ export default function PerformansPage() {
 
   const msbfGoruntulenen = msbfBirlesikSonuclar; // artık her zaman sadece Fompak/Martur
 
+  // Genel Toplam MSBF = Taban Değer + (SEÇİLEN AYDA tüm kalıplarda oluşan toplam)
+  // Not: "ömür boyu" (kümülatif ERP değeri) DEĞİL, o ayki gerçekleşen (fark alınmış) değerler kullanılır.
   const genelOrtalamaMsbf = useMemo(() => {
-    const gecerli = msbfBirlesikSonuclar.filter((s) => s.omurMsbf !== null);
-    const toplamBaski = gecerli.reduce((t, s) => t + s.omurBaski, 0) + tabanBaski;
-    const toplamAriza = gecerli.reduce((t, s) => t + s.omurArizaSayisi, 0) + tabanAriza;
-    return toplamAriza > 0 ? toplamBaski / toplamAriza : null;
+    const toplamAyBaski = msbfBirlesikSonuclar.reduce((t, s) => t + (s.ayBaskisi ?? 0), 0);
+    const toplamAyAriza = msbfBirlesikSonuclar.reduce((t, s) => t + s.ayArizaSayisi, 0);
+    const toplamBaski = toplamAyBaski + tabanBaski;
+    const toplamAriza = toplamAyAriza + tabanAriza;
+    return { toplamBaski, toplamAriza, msbf: toplamAriza > 0 ? toplamBaski / toplamAriza : null };
   }, [msbfBirlesikSonuclar, tabanBaski, tabanAriza]);
 
   // Teşhis: bu ay KA arızası olan ama baskı verisi hiç yüklenmemiş Fompak/Martur kalıp kodları
@@ -468,10 +471,14 @@ export default function PerformansPage() {
             <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontSize: 26, fontWeight: 700 }}>
-                  {genelOrtalamaMsbf !== null ? Math.round(genelOrtalamaMsbf).toLocaleString('tr-TR') : '-'}
+                  {genelOrtalamaMsbf.msbf !== null ? Math.round(genelOrtalamaMsbf.msbf).toLocaleString('tr-TR') : '-'}
                 </div>
                 <div className="muted">
-                  Genel Toplam MSBF (sistemdeki tüm kalıplar + taban değer, {msbfAy} itibarıyla)
+                  Genel Toplam MSBF ({msbfAy} itibarıyla) = Taban Değer + {msbfAy} Ayında Oluşan Toplam
+                </div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  {genelOrtalamaMsbf.toplamBaski.toLocaleString('tr-TR')} baskı / {genelOrtalamaMsbf.toplamAriza.toLocaleString('tr-TR')} arıza
+                  {' '}(Taban: {tabanBaski.toLocaleString('tr-TR')} baskı / {tabanAriza.toLocaleString('tr-TR')} arıza)
                 </div>
               </div>
               <button className="secondary" onClick={() => setTabanDuzenleniyor(!tabanDuzenleniyor)}>
@@ -481,8 +488,9 @@ export default function PerformansPage() {
             {tabanDuzenleniyor && (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
                 <p className="muted">
-                  Sistemde henüz kalıp bazında kaydı olmayan, diğer aylardan/kaynaklardan gelen kümülatif
-                  baskı ve arıza sayısını buraya girin — Genel Toplam MSBF'ye eklenir.
+                  Diğer aylardan/kaynaklardan gelen kümülatif baskı ve arıza sayısını buraya girin.
+                  Bu değer, <strong>seçilen ayda oluşan toplam</strong> ile toplanarak Genel Toplam MSBF'yi oluşturur
+                  (sistemdeki kalıpların ömür boyu kümülatif değeriyle karıştırılmaz).
                 </p>
                 <div className="row" style={{ flexWrap: 'wrap' }}>
                   <label className="muted">Taban Baskı Sayısı
