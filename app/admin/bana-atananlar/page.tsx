@@ -59,7 +59,7 @@ export default function BanaAtananlarPage() {
       <div className="record-list">
         {kayitlar.length === 0 && <p className="muted">Kendinize atadığınız kayıt yok.</p>}
         {kayitlar.map((k) => (
-          <Link key={k.id} href={`/personel/kayit/${k.id}?donus=admin`} style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Link key={k.id} href={`/panel/bakim/bana-atananlar/kayit/${k.id}?donus=admin`} style={{ textDecoration: 'none', color: 'inherit' }}>
             <div className="record-item">
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <strong>{k.tezgah}</strong>

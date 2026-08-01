@@ -130,7 +130,7 @@ export default function IsEmirleriPage() {
     <div className="container">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1>İş Emirleri</h1>
-        <Link href="/admin"><button className="secondary">← Panele Dön</button></Link>
+        <Link href="/panel/bakim"><button className="secondary">← Panele Dön</button></Link>
       </div>
 
       <div className="card">

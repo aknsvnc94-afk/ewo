@@ -526,7 +526,7 @@ export default function PerformansPage() {
     <div className="container">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1>Performans Göstergeleri</h1>
-        <Link href="/admin"><button className="secondary">← Panele Dön</button></Link>
+        <Link href="/panel/bakim"><button className="secondary">← Panele Dön</button></Link>
       </div>
       <p className="muted">MTTR, MTBF ve arıza duruş süreleri — seçilen tarih aralığı ve filtrelere göre hesaplanır.</p>
 

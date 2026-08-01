@@ -71,10 +71,10 @@ export default function PersonelPage() {
           <div className="muted">Bana Atanan Arızalar{fabrikaAdim ? ` · ${fabrikaAdim}` : ''}</div>
         </div>
         <div className="row">
-          <Link href="/personel/is-emirleri"><button className="secondary">İş Emirlerim</button></Link>
-          <Link href="/personel/malzemeler"><button className="secondary">Gelen Malzemeler</button></Link>
+          <Link href="/panel/bakim/is-emirleri-personel"><button className="secondary">İş Emirlerim</button></Link>
+          <Link href="/panel/bakim/malzemeler"><button className="secondary">Gelen Malzemeler</button></Link>
           <Link href="/personel/makineler"><button className="secondary">Makine Yedek Parça</button></Link>
-          <Link href="/personel/aksiyonlar"><button className="secondary">Aksiyonlarım</button></Link>
+          <Link href="/panel/bakim/aksiyonlar-personel"><button className="secondary">Aksiyonlarım</button></Link>
         </div>
       </div>
 
@@ -117,7 +117,7 @@ export default function PersonelPage() {
       <div className="record-list">
         {gosterilecekler.length === 0 && <p className="muted">Gösterilecek kayıt yok.</p>}
         {gosterilecekler.map((k) => (
-          <Link key={k.id} href={`/personel/kayit/${k.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Link key={k.id} href={`/panel/bakim/bana-atananlar/kayit/${k.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
             <div className="record-item">
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <strong>{k.tezgah}</strong>

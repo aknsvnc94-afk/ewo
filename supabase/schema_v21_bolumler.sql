@@ -3,7 +3,7 @@
 -- Bölüm bazlı yapı: her personel bir bölüme bağlanır.
 -- Yetki kuralı: personel TÜM bölümleri görüntüleyebilir, ancak yalnızca
 -- kendi bölümünde işlem (ekleme/güncelleme/silme) yapabilir.
--- Süper admin her bölümde işlem yapabilir.
+-- Admin ve süper admin her bölümde işlem yapabilir.
 -- Bu dosyayı Supabase SQL Editor'de, v1-v20'den SONRA çalıştırın.
 -- ============================================================
 

@@ -151,7 +151,7 @@ export default function MakinelerPage() {
     <div className="container">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1>Makine Bazlı Yedek Parça</h1>
-        <Link href="/admin"><button className="secondary">← Panele Dön</button></Link>
+        <Link href="/panel/bakim"><button className="secondary">← Panele Dön</button></Link>
       </div>
 
       <div className="card">

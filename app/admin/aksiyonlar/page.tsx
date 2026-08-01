@@ -108,7 +108,7 @@ export default function AdminAksiyonTakipPage() {
                     {a.durum === 'Kapatıldı' && (
                       <button className="secondary" onClick={() => durumDegistir(a.id, 'Açık')}>Yeniden Aç</button>
                     )}
-                    <Link href={`/admin/kayit/${a.ariza_kayit_id}`}><button className="secondary">Kaydı Gör</button></Link>
+                    <Link href={`/panel/bakim/kayit/${a.ariza_kayit_id}`}><button className="secondary">Kaydı Gör</button></Link>
                   </div>
                 </div>
               </div>

@@ -11,7 +11,7 @@ export default function PersonelKayitFormu() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
-  const donusYolu = searchParams.get('donus') === 'admin' ? '/admin/bana-atananlar' : '/personel';
+  const donusYolu = searchParams.get('donus') === 'admin' ? '/panel/bakim/bana-atananlar' : '/personel';
   const id = params?.id as string;
 
   const [kayit, setKayit] = useState<any>(null);

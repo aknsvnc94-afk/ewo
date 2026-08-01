@@ -73,7 +73,7 @@ export default function SiparislerPage() {
         <div className="record-list">
           {siparisler.length === 0 && <p className="muted">Henüz sipariş yüklenmedi.</p>}
           {siparisler.map((s) => (
-            <Link key={s.id} href={`/admin/siparisler/${s.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+            <Link key={s.id} href={`/panel/bakim/siparisler/${s.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
               <div className="record-item">
                 <div className="row" style={{ justifyContent: 'space-between' }}>
                   <strong>{s.talep_no ? `Talep No: ${s.talep_no}` : s.dosya_adi}</strong>

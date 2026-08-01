@@ -51,7 +51,7 @@ export default function SiparisDetayPage() {
   async function siparisSil() {
     if (!confirm('Bu siparişi ve tüm kalemlerini KALICI olarak silmek istediğinize emin misiniz?')) return;
     const res = await fetch(`/api/siparis/${id}`, { method: 'DELETE' });
-    if (res.ok) router.push('/admin/siparisler');
+    if (res.ok) router.push('/panel/bakim/siparisler');
   }
 
   async function alindiIsaretle(kalemId: string, deger: boolean) {
@@ -88,7 +88,7 @@ export default function SiparisDetayPage() {
         <h1>{siparis.talep_no ? `Talep No: ${siparis.talep_no}` : siparis.dosya_adi}</h1>
         <div className="row">
           <button className="danger" onClick={siparisSil}>Siparişi Sil</button>
-          <Link href="/admin/siparisler"><button className="secondary">← Sipariş Listesine Dön</button></Link>
+          <Link href="/panel/bakim/siparisler"><button className="secondary">← Sipariş Listesine Dön</button></Link>
         </div>
       </div>
       <p className="muted">

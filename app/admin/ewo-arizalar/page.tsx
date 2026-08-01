@@ -219,7 +219,7 @@ export default function AdminPage() {
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1>EWO Arıza Kayıtları</h1>
         <div className="row">
-          <Link href="/admin"><button className="secondary">← Panele Dön</button></Link>
+          <Link href="/panel/bakim"><button className="secondary">← Panele Dön</button></Link>
           <Link href="/admin/personel"><button className="secondary">Personel Yönetimi</button></Link>
         </div>
       </div>
@@ -350,7 +350,7 @@ export default function AdminPage() {
                   <td>{k.personel?.ad_soyad || <span className="muted">Atanmadı</span>}</td>
                   <td>
                     <div className="row" style={{ flexWrap: 'nowrap' }}>
-                      {ewoGerekli && <Link href={`/admin/kayit/${k.id}`}><button className="secondary">İncele</button></Link>}
+                      {ewoGerekli && <Link href={`/panel/bakim/kayit/${k.id}`}><button className="secondary">İncele</button></Link>}
                       <button className="secondary" onClick={() => duzenlemeyeBasla(k)}>Düzenle</button>
                       <button className="danger" onClick={() => kayitSil([k.id])}>Sil</button>
                     </div>
@@ -402,7 +402,7 @@ export default function AdminPage() {
                 <div className={`status-${k.tamamlanma_durumu?.replace(' ', '')}`}>{k.tamamlanma_durumu}</div>
                 <div className="muted">{k.personel?.ad_soyad || 'Atanmadı'}</div>
                 <div className="row" style={{ marginTop: 8 }}>
-                  {ewoGerekli && <Link href={`/admin/kayit/${k.id}`}><button className="secondary">İncele</button></Link>}
+                  {ewoGerekli && <Link href={`/panel/bakim/kayit/${k.id}`}><button className="secondary">İncele</button></Link>}
                   <button className="secondary" onClick={() => duzenlemeyeBasla(k)}>Düzenle</button>
                   <button className="danger" onClick={() => kayitSil([k.id])}>Sil</button>
                 </div>
