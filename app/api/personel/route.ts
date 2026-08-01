@@ -15,7 +15,7 @@ export async function GET() {
 
   let query = supabase
     .from('personel')
-    .select('id, ad_soyad, kullanici_adi, rol, aktif, fabrika_id, fabrika:fabrika_id ( ad )')
+    .select('id, ad_soyad, kullanici_adi, rol, aktif, bolum, fabrika_id, fabrika:fabrika_id ( ad )')
     .order('ad_soyad');
 
   if (session.rol === 'admin') {
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
 
-  const { ad_soyad, kullanici_adi, sifre, rol, fabrika_id } = await req.json();
+  const { ad_soyad, kullanici_adi, sifre, rol, fabrika_id, bolum } = await req.json();
   if (!ad_soyad || !kullanici_adi || !sifre) {
     return NextResponse.json({ error: 'Ad soyad, kullanıcı adı ve şifre gerekli' }, { status: 400 });
   }
@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
     p_kullanici_adi: kullanici_adi,
     p_sifre: sifre,
     p_rol: hedefRol,
+    p_bolum: ['bakim', 'kalite', 'uretim'].includes(bolum) ? bolum : 'bakim',
     p_fabrika_id: hedefFabrikaId,
   });
 
@@ -85,7 +86,7 @@ export async function PATCH(req: NextRequest) {
   if (!session || !yetkiliMi(session.rol)) {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
-  const { id, aktif, ad_soyad, kullanici_adi, rol, yeni_sifre } = await req.json();
+  const { id, aktif, ad_soyad, kullanici_adi, rol, yeni_sifre, bolum } = await req.json();
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
   const supabase = supabaseAdmin();
@@ -101,6 +102,9 @@ export async function PATCH(req: NextRequest) {
   if (typeof aktif === 'boolean') updatePayload.aktif = aktif;
   if (ad_soyad) updatePayload.ad_soyad = ad_soyad;
   if (kullanici_adi) updatePayload.kullanici_adi = kullanici_adi.toLowerCase().trim();
+  if (['bakim', 'kalite', 'uretim'].includes(bolum)) {
+    updatePayload.bolum = bolum;
+  }
   if (rol === 'admin' || rol === 'personel' || (rol === 'superadmin' && session.rol === 'superadmin')) {
     updatePayload.rol = rol;
   }

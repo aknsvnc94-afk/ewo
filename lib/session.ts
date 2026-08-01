@@ -9,6 +9,7 @@ type SessionData = {
   rol: 'admin' | 'personel' | 'superadmin';
   fabrikaId: string | null;
   fabrikaAd: string | null;
+  bolum: 'bakim' | 'kalite' | 'uretim' | null;
 };
 
 function sign(payload: string) {

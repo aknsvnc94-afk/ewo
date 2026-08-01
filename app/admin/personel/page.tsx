@@ -2,8 +2,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
+const BOLUM_ADLARI: Record<string, string> = { bakim: 'Bakım', kalite: 'Kalite', uretim: 'Üretim' };
+
 type Personel = {
-  id: string; ad_soyad: string; kullanici_adi: string; rol: string; aktif: boolean;
+  id: string; ad_soyad: string; kullanici_adi: string; rol: string; aktif: boolean; bolum?: string;
   fabrika_id: string | null; fabrika: { ad: string } | null;
 };
 type Fabrika = { id: string; ad: string; kod: string };
@@ -26,8 +28,9 @@ export default function PersonelYonetimiPage() {
   const [mesaj, setMesaj] = useState('');
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
+  const [bolum, setBolum] = useState('bakim');
   const [duzenlenenId, setDuzenlenenId] = useState<string | null>(null);
-  const [duzenleForm, setDuzenleForm] = useState<{ ad_soyad: string; kullanici_adi: string; rol: string; yeni_sifre: string }>({ ad_soyad: '', kullanici_adi: '', rol: 'personel', yeni_sifre: '' });
+  const [duzenleForm, setDuzenleForm] = useState<{ ad_soyad: string; kullanici_adi: string; rol: string; yeni_sifre: string; bolum: string }>({ ad_soyad: '', kullanici_adi: '', rol: 'personel', yeni_sifre: '', bolum: 'bakim' });
 
   async function benimBilgim() {
     const res = await fetch('/api/auth/me');
@@ -92,7 +95,7 @@ export default function PersonelYonetimiPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ad_soyad: adSoyad, kullanici_adi: kullaniciAdi, sifre, rol,
+          ad_soyad: adSoyad, kullanici_adi: kullaniciAdi, sifre, rol, bolum,
           fabrika_id: isSuperadmin && rol !== 'superadmin' ? fabrikaId : undefined,
         }),
       });
@@ -101,7 +104,7 @@ export default function PersonelYonetimiPage() {
         setMesaj(`Hata: ${data.error}`);
       } else {
         setMesaj(`✓ ${adSoyad} eklendi. Kullanıcı adı: ${kullaniciAdi.toLowerCase()}`);
-        setAdSoyad(''); setKullaniciAdi(''); setSifre(''); setRol('personel'); setFabrikaId('');
+        setAdSoyad(''); setKullaniciAdi(''); setSifre(''); setRol('personel'); setFabrikaId(''); setBolum('bakim');
         listeyiGetir();
       }
     } finally {
@@ -120,7 +123,7 @@ export default function PersonelYonetimiPage() {
 
   function duzenlemeyeBasla(p: Personel) {
     setDuzenlenenId(p.id);
-    setDuzenleForm({ ad_soyad: p.ad_soyad, kullanici_adi: p.kullanici_adi, rol: p.rol, yeni_sifre: '' });
+    setDuzenleForm({ ad_soyad: p.ad_soyad, kullanici_adi: p.kullanici_adi, rol: p.rol, yeni_sifre: '', bolum: p.bolum || 'bakim' });
     setMesaj('');
   }
 
@@ -132,6 +135,7 @@ export default function PersonelYonetimiPage() {
         ad_soyad: duzenleForm.ad_soyad,
         kullanici_adi: duzenleForm.kullanici_adi,
         rol: duzenleForm.rol,
+        bolum: duzenleForm.bolum,
       };
       if (duzenleForm.yeni_sifre) body.yeni_sifre = duzenleForm.yeni_sifre;
 
@@ -206,6 +210,11 @@ export default function PersonelYonetimiPage() {
             <option value="admin">Admin</option>
             {isSuperadmin && <option value="superadmin">Süper Admin</option>}
           </select>
+          <select value={bolum} onChange={(e) => setBolum(e.target.value)}>
+            <option value="bakim">Bakım Bölümü</option>
+            <option value="kalite">Kalite Bölümü</option>
+            <option value="uretim">Üretim Bölümü</option>
+          </select>
           {isSuperadmin && rol !== 'superadmin' && (
             <select value={fabrikaId} onChange={(e) => setFabrikaId(e.target.value)} required>
               <option value="" disabled>Fabrika seçin</option>
@@ -237,6 +246,13 @@ export default function PersonelYonetimiPage() {
                       {isSuperadmin && <option value="superadmin">Süper Admin</option>}
                     </select>
                   </label>
+                  <label className="muted">Bölüm
+                    <select value={duzenleForm.bolum} onChange={(e) => setDuzenleForm({ ...duzenleForm, bolum: e.target.value })} style={{ width: '100%', marginTop: 4 }}>
+                      <option value="bakim">Bakım</option>
+                      <option value="kalite">Kalite</option>
+                      <option value="uretim">Üretim</option>
+                    </select>
+                  </label>
                   <label className="muted">Yeni Şifre (değiştirmek istemiyorsan boş bırak)
                     <input value={duzenleForm.yeni_sifre} onChange={(e) => setDuzenleForm({ ...duzenleForm, yeni_sifre: e.target.value })} style={{ width: '100%', marginTop: 4 }} />
                   </label>
@@ -251,6 +267,7 @@ export default function PersonelYonetimiPage() {
                     <strong>{p.ad_soyad}</strong>
                     <div className="muted">
                       @{p.kullanici_adi} · {p.rol === 'superadmin' ? 'Süper Admin' : p.rol === 'admin' ? 'Admin' : 'Personel'}
+                      {p.rol !== 'superadmin' && ` · ${BOLUM_ADLARI[p.bolum || 'bakim']}`}
                       {isSuperadmin && (p.fabrika ? ` · ${p.fabrika.ad}` : ' · —')}
                     </div>
                     <div className={p.aktif ? 'status-Tamamlandı' : 'status-İptal'}>{p.aktif ? 'Aktif' : 'Pasif'}</div>

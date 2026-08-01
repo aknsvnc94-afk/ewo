@@ -66,9 +66,10 @@ export async function POST(req: NextRequest) {
     rol: user.rol,
     fabrikaId: user.fabrika_id,
     fabrikaAd,
+    bolum: user.bolum ?? 'bakim',
   });
 
-  const res = NextResponse.json({ ok: true, ad_soyad: user.ad_soyad, rol: user.rol, fabrikaAd });
+  const res = NextResponse.json({ ok: true, ad_soyad: user.ad_soyad, rol: user.rol, fabrikaAd, bolum: user.bolum ?? 'bakim' });
   res.cookies.set(SESSION_COOKIE_NAME, cookieValue, {
     httpOnly: true,
     secure: true,
