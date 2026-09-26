@@ -1,0 +1,15 @@
+{
+  "name": "ewo-yardimci-tesis-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fabrika içinde 7/24 çalışan köprü servisi: AnKA GLC (Modbus RTU/TCP) ile Supabase arasında veri aktarır.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5",
+    "modbus-serial": "^8.0.17"
+  }
+}
