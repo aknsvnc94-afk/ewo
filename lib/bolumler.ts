@@ -33,6 +33,7 @@ export const BOLUMLER: Bolum[] = [
       { ad: 'Performans', aciklama: 'MTTR, MTBF, MSBF göstergeleri', yol: '/panel/bakim/performans', ikon: 'gauge', hazir: true, sadeceAdmin: true },
       { ad: 'Siparişler', aciklama: 'Satınalma talep ve malzeme takibi', yol: '/panel/bakim/siparisler', ikon: 'package', hazir: true, sadeceAdmin: true },
       { ad: 'Makineler', aciklama: 'Makine ve yedek parça listesi', yol: '/panel/bakim/makineler', ikon: 'settings', hazir: true, sadeceAdmin: true },
+      { ad: 'Yardımcı Tesis Kontrol', aciklama: 'Sıcaklık, pompa, kompresör, chiller izleme ve kontrol', yol: '/panel/bakim/yardimci-tesis', ikon: 'gauge', hazir: true, sadeceAdmin: true },
     ],
   },
   {
