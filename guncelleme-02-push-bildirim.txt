@@ -1,0 +1,1336 @@
+set -e
+echo "Push bildirim + EWO atama bildirimi dosyalari yaziliyor..."
+
+cat > 'package.json' << 'DOSYASONU'
+{
+  "name": "bakim-yonetim-sistemi",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "next": "^14.2.35",
+    "pdf-parse": "^1.1.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "web-push": "^3.6.7",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0",
+    "@types/web-push": "^3.6.4",
+    "typescript": "^5.5.0"
+  }
+}
+DOSYASONU
+
+cat > '.env.example' << 'DOSYASONU'
+# Supabase Proje Ayarları (Supabase Dashboard > Settings > API adresinden alınır)
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=xxxxxxxx   # GİZLİ - sadece sunucu tarafında kullanılır, asla client'a sızdırılmaz
+
+# Basit oturum imzalama anahtarı (rastgele uzun bir metin girin)
+SESSION_SECRET=degistirilmesi-gereken-uzun-rastgele-bir-anahtar
+
+# Web Push bildirimleri (VAPID anahtar çifti) — bir kere üretilir, sabit kalır.
+# NEXT_PUBLIC_VAPID_PUBLIC_KEY istemci tarafında da kullanıldığı için "NEXT_PUBLIC_" ön eki şart.
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=xxxxxxxx
+VAPID_PRIVATE_KEY=xxxxxxxx   # GİZLİ - sadece sunucu tarafında kullanılır
+VAPID_SUBJECT=mailto:seninmailin@ornek.com
+DOSYASONU
+
+cat > 'README.md' << 'DOSYASONU'
+# Bakım Yönetim Sistemi (Web)
+
+Çoklu fabrika desteğiyle çalışan bakım yönetim platformu: ERP arıza kayıtlarını
+yükleme, personele atama ve personelin mobil/PC üzerinden detay (aksiyon, kök
+neden, tamamlanma durumu) doldurmasını sağlar. Telefonda "ana ekrana ekle" ile
+uygulama gibi çalışır (PWA).
+
+Her fabrikanın verisi (personel, arıza kayıtları, iş emirleri, siparişler,
+aksiyonlar) birbirinden tamamen izole — giriş ekranında kullanıcı önce
+fabrikasını seçer. Ayrıca tüm fabrikalardaki personeli yönetebilen bir
+**Süper Admin** rolü de mevcuttur.
+
+## Mimari
+- **Frontend:** Next.js 14 (App Router) + PWA
+- **Backend:** Next.js API Routes
+- **Veritabanı:** Supabase (Postgres)
+- **Giriş:** Fabrika seçimi + Kullanıcı adı + PIN (imzalı cookie ile 30 gün oturum)
+- **Barındırma:** Vercel (frontend) + Supabase (veritabanı) — ikisi de ücretsiz planla başlar
+
+## Kurulum Adımları
+
+### 1) Supabase projesi oluştur
+1. https://supabase.com üzerinde yeni proje aç
+2. SQL Editor'e girip şu sırayla çalıştır:
+   - `supabase/schema.sql`
+   - `supabase/schema_v2_ewo_form.sql`
+   - `supabase/schema_v3_guncelleme.sql`
+   - `supabase/schema_v4_aksiyonlar.sql`
+   - `supabase/schema_v5_siparis_ve_sira_no.sql`
+   - `supabase/schema_v6_siparis_onay.sql` (opsiyonel, artık kullanılmıyor ama zararsız)
+   - `supabase/schema_v7_genel_tesis.sql`
+   - `supabase/schema_v8_is_emirleri.sql`
+   - `supabase/schema_v9_giris_guvenligi.sql`
+   - `supabase/schema_v10_fabrikalar.sql` (çoklu fabrika desteği — mevcut tüm
+   - `supabase/schema_v11_gelistirmeler.sql`
+   - `supabase/schema_v12_makine_kodu_esleme.sql`
+   - `supabase/schema_v13_silme_izinleri.sql`
+   - `supabase/schema_v14_kalip_baski.sql` (MSBF için kalıp baskı sayısı tablosu)
+   - `supabase/schema_v15_msbf_gelistirmeler.sql`
+   - `supabase/schema_v16_kumulatif_duzeltme.sql`
+   - `supabase/schema_v17_yt_baski_nullable.sql`
+   - `supabase/schema_v18_msbf_taban.sql`
+   - `supabase/schema_v19_proje_kaliplari.sql`
+   - `supabase/schema_v20_siparis_kalem_sutunlari.sql` (sipariş PDF: stok adı + açıklama sütunları)
+   - `supabase/schema_v21_bolumler.sql` (bölüm bazlı yapı: bakım / kalite / üretim)
+   - `supabase/schema_v22_yardimci_tesis.sql` (Yardımcı Tesis Kontrol: AnKA GLC izleme/kontrol)
+   - `supabase/schema_v23_push_bildirimleri.sql` (Web Push bildirim abonelikleri)
+     veri geriye dönük olarak "Plaskar" fabrikasına atanır)
+3. İlk fabrikanı (Plaskar zaten `schema_v10` ile otomatik oluşuyor) veya yeni bir
+   fabrika daha eklemek istersen:
+   ```sql
+   insert into fabrikalar (ad, kod) values ('Yeni Fabrika A.Ş.', 'yeni-fabrika') returning id;
+   ```
+   O fabrikaya admin ekle (PIN'i kendi belirlediğinle değiştir, `fabrika_id`'yi
+   yukarıdaki `insert`'ten dönen id ile değiştir — Plaskar için sabit id
+   `00000000-0000-0000-0000-000000000001`):
+   ```sql
+   insert into personel (ad_soyad, kullanici_adi, pin_hash, rol, fabrika_id)
+   values ('Akın Sevinç', 'akin', crypt('SENIN_SIFREN', gen_salt('bf')), 'admin', '00000000-0000-0000-0000-000000000001');
+   ```
+   Tüm fabrikalardaki personeli tek yerden yönetebilen bir **süper admin**
+   eklemek istersen (`fabrika_id` bilerek `null` bırakılır):
+   ```sql
+   insert into personel (ad_soyad, kullanici_adi, pin_hash, rol, fabrika_id)
+   values ('Akın Sevinç', 'superadmin', crypt('SENIN_SIFREN', gen_salt('bf')), 'superadmin', null);
+   ```
+   (Diğer personelleri artık `/admin/personel` sayfasından, SQL yazmadan ekleyebilir/düzenleyebilir/silebilirsin.)
+4. Settings > API sayfasından `Project URL` ve `service_role`/`secret` key'i kopyala
+5. **Storage bucket oluştur (fotoğraf yüklemeleri için):**
+   - Sol menüden **Storage** → **New bucket**
+   - İsim: `cozum-resimleri`
+   - **Public bucket** seçeneğini AÇIK bırak (fotoğrafların görüntülenebilmesi için gerekli)
+   - Create
+6. **İkinci Storage bucket'ı oluştur (sipariş PDF'leri için):**
+   - Storage → New bucket
+   - İsim: `siparis-pdfler`
+   - **Public bucket** seçeneğini AÇIK bırak
+   - Create
+
+### 2) Ortam değişkenleri
+`.env.example` dosyasını `.env.local` olarak kopyala ve Supabase bilgilerini gir:
+```
+NEXT_PUBLIC_SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+SESSION_SECRET=uzun-rastgele-bir-metin
+```
+
+### 3) Yerelde çalıştır (test için)
+```bash
+npm install
+npm run dev
+```
+http://localhost:3000 adresinden test edebilirsin.
+
+### 4) Vercel'e deploy et
+1. Bu klasörü bir GitHub reposuna push et
+2. https://vercel.com üzerinde "Import Project" ile repoyu bağla
+3. Environment Variables kısmına `.env.local` içeriğini gir
+4. Deploy et — sana `https://xxx.vercel.app` gibi bir adres verecek
+
+### 5) Telefonda kullanım
+Vercel adresini telefonda tarayıcıda aç → paylaş/menü > "Ana Ekrana Ekle".
+Artık uygulama gibi ikonla açılır.
+
+## Kullanım Akışı
+0. **Giriş:** Herkes önce fabrikasını seçer, sonra kullanıcı adı + şifre girer.
+   Süper admin hesapları listenin altındaki "Süper Admin" seçeneğiyle, fabrika
+   seçmeden giriş yapar ve doğrudan `/admin/personel`'e (tüm fabrikalardaki
+   personel listesi) yönlendirilir.
+1. **Admin (sen):** `/admin/personel` sayfasından bakım personeline kullanıcı adı + şifre tanımla
+   (düzenleme, şifre sıfırlama, pasif yapma ve silme seçenekleri de burada)
+2. **Admin:** ERP'den Excel export al → `/admin` sayfasından yükle (tarayıcıda parse edilir,
+   4.5MB sunucu sınırına takılmaz), MA/BA/KA/RA'ya otomatik ayrılır, mükerrer kayıtlar atlanır
+3. **Admin:** Kayıtları filtrele/sırala (tarih, süre, tezgah), seç → personele topluca ata
+4. **Personel:** `/personel`'de kendine atanan kayıtları ve özet sayılarını (toplam/bekleyen/
+   onay bekleyen/onaylı) görür. Bir kayda dokunduğunda:
+   - **20 dakikadan KISA duruşlarda:** sadece "Tamamlandı" işaretler, form yok
+   - **20 dakikadan UZUN duruşlarda:** Arıza Türü + Arızanın Tanımı + Direk Sebep ve Çözümü
+     (en az 10 karakter, boş bırakılamaz) + isteğe bağlı fotoğraf ekler, "Tamamla ve Gönder" der
+     → kayıt "Onay Bekliyor" durumuna geçer
+5. **Admin:** `/admin` üzerinden "İncele" ile (sadece 20dk üzeri kayıtlarda görünür) zaman
+   çizelgesi, 5 Neden analizi, Kök Sebep Tipi (Çalışma koşullarının izlenmemesi / Proje
+   zayıflığı / Dış etkenler / Temel şartların eksikliği / Yetersiz bakım / Eksik beceri-yetkinlik),
+   önlemler (her satırda **personel listesinden Sorumlu seçilir**) ve sonucu doldurur;
+   "Üretim Başlangıcını Hesapla" ile bitiş saatini arıza başlangıcı + süreden otomatik alabilir.
+   Sonra **Onaylar** veya **Personele geri gönderir**
+6. **Admin/Personel:** "PDF Görüntüle/İndir" ile formu orijinal EWO (F13-31) formatında
+   yazdırılabilir görünümde açar, tarayıcının "Yazdır > PDF olarak kaydet" seçeneğiyle indirir
+7. **Admin:** Ana panelde personel bazlı atanan iş sayısı grafiğini görür
+8. **Aksiyon Takip (`/admin/aksiyonlar`, personel için `/personel/aksiyonlar`):** Önlem
+   tablolarında sorumlu atanan her satır burada ayrı bir görev olarak izlenir. Personel işini
+   bitirince "Kapat" der, not girer → admin onayına düşer. Admin onaylar ya da geri gönderir.
+   Termin tarihi geçmiş ve hâlâ kapatılmamış aksiyonlar **kırmızı**, diğerleri **yeşil** kenarlıkla
+   gösterilir; üstte toplam/açık/onay bekleyen/kapatılan/gecikmiş sayıları görünür.
+9. **EWO Analiz / Pareto (`/admin/analiz`):** MA / KA / BA / RA olmak üzere 4 ayrı bölüm.
+   Her bölümde sadece 20dk üzeri (EWO gerektiren) arızalar dahil edilir: MA/BA/RA için **tezgah**
+   bazında, KA için **kalıp kodu** bazında Pareto grafiği + açık/kapalı EWO sayıları + **kök neden
+   dağılımı grafiği** gösterilir.
+10. **Sıra Numarası:** Her arıza kaydına otomatik olarak "2026-1", "2026-2" ... şeklinde artan bir
+    sıra numarası atanır (veritabanı tetikleyicisiyle), ERP'nin kendi iş emri numarası (İş Emri
+    Detay Kodu) da ayrı bir sütunda yanında görünür.
+11. **Manuel Kayıt (`/admin/yeni-kayit`):** ERP'den gelmeyen arızalar/görevler için admin doğrudan
+    kayıt açabilir, personel atayabilir ve aksiyon tanımlayabilir.
+12. **Sipariş Takip (`/admin/siparisler`):** ERP'den açılan "Satınalma Talep Formu" PDF'i yüklenir,
+    sistem Talep No / Tarih / Bölüm / Kişi bilgilerini ve her kalemi (Stok Kodu, Açıklama, Miktar,
+    Teslim Tarihi) otomatik ayrıştırır. Personel `/personel/malzemeler` sayfasından malzemeyi
+    "Alındı" işaretler (tarih/saat otomatik kaydedilir). Teslim tarihi geçmiş ve hâlâ alınmamış
+    kalemler kırmızı gösterilir.
+
+**Not:** PDF ayrıştırma mantığı, gönderdiğiniz örnek "Satınalma Talep Formu" düzenine göre
+kalibre edildi (stok kodu deseni: 2-6 harf + 6-10 rakam, örn. BYP20260763). Farklı bir ERP şablonu
+kullanırsanız, `app/api/siparis/upload/route.ts` içindeki `STOK_KODU_DESENI` ve `DETAY_DESENI`
+regex'lerinin güncellenmesi gerekebilir.
+
+13. **İş Emirleri (`/admin/is-emirleri`, personel için `/personel/is-emirleri`):** Günlük "açık iş
+    emirleri" Excel dökümünü (başlıksız, sabit sütunlu format) admin yükler — sistem İş Emri No,
+    Onarılan Kodu, Onarılan Tanımı, Problem Tanımı, Tarih ve Tesis Adı'nı otomatik çıkarır.
+    Admin bu iş emirlerini personele atar; personel kendi sayfasından yaptığı işi yazıp
+    **"İşi Bitir ve Kapat"** der — kapanma tarihi/saati ve kapatan kişi otomatik kaydedilir.
+    Mükerrer iş emri numaraları (aynı dosya tekrar yüklense bile) otomatik atlanır.
+
+**Not:** İş emri Excel formatının hiç başlık satırı yok, sütunlar sabit pozisyonda okunuyor
+(`lib/isEmriParse.ts` içindeki `SUTUN` sabitleri: Onarılan Kodu=3, Onarılan Tanımı=4,
+Problem Tanımı=5, Tarih=6, İş Emri No=7, Tesis Adı=31). ERP'niz farklı bir sütun sırası
+üretirse bu sabitlerin güncellenmesi gerekir.
+
+## Sonraki Aşamalar (yol haritası)
+- [ ] Telegram bot ile yeni atama bildirimi (senin AnKA GLC botunla entegre edilebilir)
+- [ ] Pareto/KPI dashboard sayfası — kök neden türü, kategori (MA/BA/KA/RA) ve tezgah
+      bazında toplam duruş süresi analizleri
+- [ ] Excel'e geri dışa aktarma (raporlama için)
+- [ ] Gerçek PWA ikonları (public/icon-192.png, icon-512.png ekle)
+
+## Notlar
+- `service_role` key çok güçlü bir anahtardır, sadece sunucu tarafında (.env.local, Vercel env vars)
+  kullanılır, asla frontend koduna veya GitHub'a commit edilmemelidir (.gitignore'da .env.local var).
+- Mükerrer kayıt kontrolü TEZGAH + BAŞLANGIÇ + DURUŞ KODU + İŞ EMRİ DETAY KODU + SÜRE kombinasyonuyla yapılır.
+  ERP export formatı değişirse `app/api/import/route.ts` içindeki `COLS` dizisini güncelle.
+DOSYASONU
+
+mkdir -p 'supabase'
+cat > 'supabase/schema_v23_push_bildirimleri.sql' << 'DOSYASONU'
+-- ============================================================
+-- BAKIM YÖNETİM SİSTEMİ - Şema Güncelleme v23
+-- Web Push bildirimleri: personelin tarayıcı/PWA push aboneliklerini
+-- tutar. Yeni sipariş eklendiğinde (ve ileride başka olaylarda)
+-- ilgili personele push bildirimi göndermek için kullanılır.
+-- Bu dosyayı Supabase SQL Editor'de, v1-v22'den SONRA çalıştırın.
+-- ============================================================
+
+create table if not exists push_abonelikleri (
+  id uuid primary key default gen_random_uuid(),
+  fabrika_id uuid not null references fabrikalar(id),
+  personel_id uuid not null references personel(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  olusturma_tarihi timestamptz not null default now()
+);
+
+create index if not exists idx_push_personel on push_abonelikleri(personel_id);
+
+alter table push_abonelikleri enable row level security;
+DOSYASONU
+
+mkdir -p 'lib'
+cat > 'lib/push.ts' << 'DOSYASONU'
+import webpush from 'web-push';
+import { supabaseAdmin } from './supabase';
+
+let vapidAyarlandi = false;
+function vapidHazirla() {
+  if (vapidAyarlandi) return;
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  if (!publicKey || !privateKey) {
+    throw new Error('VAPID anahtarları tanımlı değil (NEXT_PUBLIC_VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)');
+  }
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:bildirim@example.com',
+    publicKey,
+    privateKey
+  );
+  vapidAyarlandi = true;
+}
+
+type BildirimIcerik = { baslik: string; govde: string; url?: string };
+
+// Verilen personel id'lerine (aynı fabrikadaki abonelikleri üzerinden) push bildirimi gönderir.
+// Süresi dolmuş/geçersiz abonelikleri (410 Gone) otomatik olarak veritabanından siler.
+export async function personellereBildirimGonder(personelIdleri: string[], icerik: BildirimIcerik) {
+  if (personelIdleri.length === 0) return;
+  vapidHazirla();
+
+  const supabase = supabaseAdmin();
+  const { data: abonelikler } = await supabase
+    .from('push_abonelikleri')
+    .select('id, endpoint, p256dh, auth')
+    .in('personel_id', personelIdleri);
+
+  if (!abonelikler || abonelikler.length === 0) return;
+
+  const payload = JSON.stringify({
+    baslik: icerik.baslik,
+    govde: icerik.govde,
+    url: icerik.url || '/panel',
+  });
+
+  await Promise.all(
+    abonelikler.map(async (abonelik) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: abonelik.endpoint, keys: { p256dh: abonelik.p256dh, auth: abonelik.auth } },
+          payload
+        );
+      } catch (err: any) {
+        // 404/410: abonelik artık geçersiz (kullanıcı bildirimi kapatmış/uygulamayı silmiş) — temizle.
+        if (err?.statusCode === 404 || err?.statusCode === 410) {
+          await supabase.from('push_abonelikleri').delete().eq('id', abonelik.id);
+        } else {
+          console.error('Push gönderim hatası:', err?.message || err);
+        }
+      }
+    })
+  );
+}
+DOSYASONU
+
+mkdir -p 'app/api/push/abone-ol'
+cat > 'app/api/push/abone-ol/route.ts' << 'DOSYASONU'
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import { readSession } from '@/lib/session';
+
+export async function POST(req: NextRequest) {
+  const session = readSession();
+  if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
+
+  const { subscription } = await req.json();
+  if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+    return NextResponse.json({ error: 'Geçersiz abonelik verisi' }, { status: 400 });
+  }
+
+  const supabase = supabaseAdmin();
+  const { error } = await supabase
+    .from('push_abonelikleri')
+    .upsert({
+      fabrika_id: session.fabrikaId,
+      personel_id: session.id,
+      endpoint: subscription.endpoint,
+      p256dh: subscription.keys.p256dh,
+      auth: subscription.keys.auth,
+    }, { onConflict: 'endpoint' });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = readSession();
+  if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+
+  const { endpoint } = await req.json();
+  if (!endpoint) return NextResponse.json({ error: 'endpoint gerekli' }, { status: 400 });
+
+  const supabase = supabaseAdmin();
+  const { error } = await supabase
+    .from('push_abonelikleri')
+    .delete()
+    .eq('endpoint', endpoint)
+    .eq('personel_id', session.id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}
+DOSYASONU
+
+mkdir -p 'public'
+cat > 'public/sw.js' << 'DOSYASONU'
+// Bu dosya tarayıcı tarafından arka planda çalıştırılır — uygulama kapalı
+// olsa bile push bildirimini yakalayıp göstermekten sorumludur.
+
+self.addEventListener('push', (event) => {
+  let veri = {};
+  try {
+    veri = event.data ? event.data.json() : {};
+  } catch {
+    veri = { baslik: 'Bildirim', govde: event.data ? event.data.text() : '' };
+  }
+
+  const baslik = veri.baslik || 'Bakım Yönetim Sistemi';
+  const secenekler = {
+    body: veri.govde || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: { url: veri.url || '/panel' },
+  };
+
+  event.waitUntil(self.registration.showNotification(baslik, secenekler));
+});
+
+// Bildirime tıklanınca, ilgili sayfayı açık bir sekmede varsa ona odaklan,
+// yoksa yeni bir sekmede aç.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const hedefUrl = event.notification.data?.url || '/panel';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((istemciler) => {
+      for (const istemci of istemciler) {
+        if (istemci.url.includes(hedefUrl) && 'focus' in istemci) return istemci.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(hedefUrl);
+    })
+  );
+});
+DOSYASONU
+
+mkdir -p 'components'
+cat > 'components/BildirimButonu.tsx' << 'DOSYASONU'
+'use client';
+import { useEffect, useState } from 'react';
+
+function urlBase64ToUint8Array(base64String: string) {
+  const dolgu = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + dolgu).replace(/-/g, '+').replace(/_/g, '/');
+  const ham = window.atob(base64);
+  const dizi = new Uint8Array(ham.length);
+  for (let i = 0; i < ham.length; i++) dizi[i] = ham.charCodeAt(i);
+  return dizi;
+}
+
+type Durum = 'kontrol_ediliyor' | 'desteklenmiyor' | 'kapali' | 'acik' | 'isleniyor' | 'reddedildi';
+
+export default function BildirimButonu() {
+  const [durum, setDurum] = useState<Durum>('kontrol_ediliyor');
+
+  useEffect(() => {
+    async function kontrolEt() {
+      if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+        setDurum('desteklenmiyor');
+        return;
+      }
+      if (Notification.permission === 'denied') {
+        setDurum('reddedildi');
+        return;
+      }
+      try {
+        const kayit = await navigator.serviceWorker.register('/sw.js');
+        const abonelik = await kayit.pushManager.getSubscription();
+        setDurum(abonelik ? 'acik' : 'kapali');
+      } catch {
+        setDurum('kapali');
+      }
+    }
+    kontrolEt();
+  }, []);
+
+  async function bildirimleriAc() {
+    setDurum('isleniyor');
+    try {
+      const izin = await Notification.requestPermission();
+      if (izin !== 'granted') {
+        setDurum(izin === 'denied' ? 'reddedildi' : 'kapali');
+        return;
+      }
+      const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!publicKey) { setDurum('desteklenmiyor'); return; }
+
+      const kayit = await navigator.serviceWorker.ready;
+      const abonelik = await kayit.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+
+      const res = await fetch('/api/push/abone-ol', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: abonelik.toJSON() }),
+      });
+      setDurum(res.ok ? 'acik' : 'kapali');
+    } catch (err) {
+      console.error('Bildirim aboneliği hatası:', err);
+      setDurum('kapali');
+    }
+  }
+
+  if (durum === 'kontrol_ediliyor' || durum === 'desteklenmiyor') return null;
+
+  if (durum === 'acik') {
+    return <div className="panel-menu-oge" style={{ cursor: 'default', color: 'var(--ok, #22c55e)' }}>🔔 Bildirimler Açık</div>;
+  }
+  if (durum === 'reddedildi') {
+    return (
+      <div className="panel-menu-oge muted" style={{ cursor: 'default', fontSize: 12.5 }}>
+        Bildirimler engellenmiş (tarayıcı ayarlarından açabilirsiniz)
+      </div>
+    );
+  }
+  return (
+    <button className="panel-menu-oge" onClick={bildirimleriAc} disabled={durum === 'isleniyor'} style={{ width: '100%' }}>
+      🔔 {durum === 'isleniyor' ? 'Açılıyor...' : 'Bildirimleri Aç'}
+    </button>
+  );
+}
+DOSYASONU
+
+mkdir -p 'app/panel'
+cat > 'app/panel/layout.tsx' << 'DOSYASONU'
+'use client';
+import { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import BildirimButonu from '@/components/BildirimButonu';
+import { BOLUMLER, bolumdeIslemYapabilir, type BolumId } from '@/lib/bolumler';
+
+type Oturum = {
+  id: string; ad_soyad: string; rol: string;
+  fabrikaAd: string | null; bolum: BolumId | null;
+};
+
+function Ikon({ ad, boyut = 18 }: { ad: string; boyut?: number }) {
+  const ortak = {
+    width: boyut, height: boyut, viewBox: '0 0 24 24', fill: 'none',
+    stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const,
+  };
+  const yollar: Record<string, JSX.Element> = {
+    tool: <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />,
+    shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" /></>,
+    factory: <><path d="M2 20h20" /><path d="M4 20V9l5 3V9l5 3V4h6v16" /></>,
+    alert: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4M12 17h.01" /></>,
+    clipboard: <><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /></>,
+    check: <><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></>,
+    chart: <><path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 5-6" /></>,
+    gauge: <><path d="M12 14l4-4" /><circle cx="12" cy="14" r="8" /><path d="M12 2v2" /></>,
+    package: <><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z" /><path d="M3.3 7L12 12l8.7-5" /><path d="M12 22V12" /></>,
+    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>,
+    inbox: <><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></>,
+    clock: <><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>,
+    users: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></>,
+    logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5M21 12H9" /></>,
+  };
+  return <svg {...ortak}>{yollar[ad] || yollar.settings}</svg>;
+}
+
+export default function PanelLayout({ children }: { children: React.ReactNode }) {
+  const [oturum, setOturum] = useState<Oturum | null>(null);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: Oturum) => setOturum(d))
+      .catch(() => router.push('/'))
+      .finally(() => setYukleniyor(false));
+  }, [router]);
+
+  // /panel/bakim/ewo-arizalar  ->  ['panel', 'bakim', 'ewo-arizalar']
+  const parcalar = (pathname || '').split('/').filter(Boolean);
+  const aktifBolumId = (BOLUMLER.some((b) => b.id === parcalar[1]) ? parcalar[1] : oturum?.bolum || 'bakim') as BolumId;
+  const aktifBolum = BOLUMLER.find((b) => b.id === aktifBolumId)!;
+
+  const adminMi = oturum?.rol === 'admin' || oturum?.rol === 'superadmin';
+  const yetkili = bolumdeIslemYapabilir(oturum, aktifBolumId);
+  const gorunenModuller = aktifBolum.moduller.filter((m) => (m.sadeceAdmin ? adminMi : true));
+
+  async function cikisYap() {
+    await fetch('/api/auth/login', { method: 'DELETE' });
+    router.push('/');
+  }
+
+  if (yukleniyor) {
+    return <div style={{ padding: 24 }}><p className="muted">Yükleniyor...</p></div>;
+  }
+
+  return (
+    <div className="panel-duzen">
+      <aside className="panel-kenar">
+        <div className="panel-kenar-ust">
+          <div className="panel-fabrika">{oturum?.fabrikaAd || 'Süper Admin'}</div>
+          <div className="panel-kullanici">{oturum?.ad_soyad}</div>
+        </div>
+
+        <nav className="panel-menu">
+          {BOLUMLER.map((b) => (
+            <Link
+              key={b.id}
+              href={`/panel/${b.id}`}
+              className={`panel-menu-oge ${aktifBolumId === b.id ? 'aktif' : ''}`}
+            >
+              <Ikon ad={b.ikon} />
+              <span>{b.ad}</span>
+              {oturum?.bolum === b.id && <span className="panel-rozet">Bölümünüz</span>}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="panel-kenar-alt">
+          <BildirimButonu />
+          {adminMi && (
+            <Link href="/admin/personel" className="panel-menu-oge">
+              <Ikon ad="users" /><span>Personel</span>
+            </Link>
+          )}
+          <button className="panel-menu-oge" onClick={cikisYap}>
+            <Ikon ad="logout" /><span>Çıkış</span>
+          </button>
+        </div>
+      </aside>
+
+      <div className="panel-modul-kenar">
+        <div className="panel-modul-baslik">
+          <div className="panel-modul-ad">{aktifBolum.ad}</div>
+          <div className="panel-modul-alt">{aktifBolum.altBaslik}</div>
+        </div>
+        <nav className="panel-menu">
+          {gorunenModuller.map((m) => {
+            const aktif = pathname === m.yol;
+            return m.hazir ? (
+              <Link key={m.yol} href={m.yol} className={`panel-menu-oge ${aktif ? 'aktif' : ''}`}>
+                <Ikon ad={m.ikon} boyut={17} />
+                <span>{m.ad}</span>
+              </Link>
+            ) : (
+              <div key={m.yol} className="panel-menu-oge pasif">
+                <Ikon ad={m.ikon} boyut={17} />
+                <span>{m.ad}</span>
+                <span className="panel-rozet">Yakında</span>
+              </div>
+            );
+          })}
+          {gorunenModuller.length === 0 && (
+            <p className="muted" style={{ fontSize: 13, padding: '4px 10px' }}>Görüntülenecek modül yok.</p>
+          )}
+        </nav>
+      </div>
+
+      <main className="panel-icerik">
+        {!yetkili && (
+          <div className="panel-uyari">
+            Bu bölümü görüntülüyorsunuz ancak işlem yapma yetkiniz yok.
+          </div>
+        )}
+        {children}
+      </main>
+    </div>
+  );
+}
+DOSYASONU
+
+mkdir -p 'app/api/siparis/upload'
+cat > 'app/api/siparis/upload/route.ts' << 'DOSYASONU'
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import { readSession } from '@/lib/session';
+import { personellereBildirimGonder } from '@/lib/push';
+
+const BUCKET = 'siparis-pdfler';
+
+// Plaskar "SATINALMA TALEP FORMU" düzenine göre ayrıştırma.
+// STOK KODU deseni: 2-6 harf + 6-10 rakam (örn. BYP20260763)
+const STOK_KODU_DESENI = /\b[A-ZÇĞİÖŞÜ]{2,6}\d{6,10}/g;
+// Bir kalem bloğu içinde miktar + teslim tarihi: "5,00 AD28.07.2026" gibi
+const DETAY_DESENI = /(\d+[.,]\d{1,2})\s*(AD|ADET|KG|LT|M2|M3|M)?\s*(\d{2}\.\d{2}\.\d{4})/i;
+// AÇIKLAMA sütununda yazılan makine kodları: "FOM-MB021" gibi (harf-harf/rakam
+// birleşimi, tireyle ayrılmış). Ayraç "/" (yeni format) veya " - " (eski format)
+// fark etmeksizin, kod şeklinden tanınır — stok adı metninde bu şekle rastlanmaz.
+const MAKINE_KODU_DESENI = /\b[A-ZÇĞİÖŞÜ]{2,6}-[A-Z0-9ÇĞİÖŞÜ]{2,8}\b/g;
+// Tiresiz makine adlandırması: "PEM 1001", "PEM1300" gibi (harf öbeği + rakam).
+// Sadece AÇIKLAMA sütununda arandığı için stok adındaki ürün kodlarıyla karışmaz.
+const MAKINE_ADI_DESENI = /\b[A-ZÇĞİÖŞÜ]{2,6}[ ]?\d{3,5}\b/g;
+const TARIH_DESENI = /\d{2}\.\d{2}\.\d{4}/;
+
+// ============================================================
+// KONUM (x/y) TABANLI TABLO AYRIŞTIRMA
+// ------------------------------------------------------------
+// PDF'ten düz metin çıkarıldığında sütunlar ARAYSIZ birleşiyor:
+//   "BYP202607940.1X5000 MM ŞERİT LAYNERKALIP BAKIM..."
+// Bu yüzden düz metin üzerinde regex ile sağlıklı ayrıştırma yapılamıyor
+// (stok koduna rakam yapışıyor, stok adındaki "PT570024" sahte kalem
+// oluşturuyor, "PEM 1001" + "8,00" birleşip miktarı bozuyor).
+// Çözüm: metin parçalarını x/y koordinatlarıyla alıp, başlık satırından
+// sütun sınırlarını çıkarmak ve her parçayı ait olduğu sütuna yerleştirmek.
+// ============================================================
+
+type MetinParcasi = { str: string; x: number; y: number; w: number };
+type SutunAnahtari = 'stok_kodu' | 'stok_adi' | 'aciklama' | 'miktar' | 'teslim_tarihi' | 'not';
+type Kalem = {
+  satir_metni: string; stok_kodu: string | null; stok_adi: string | null;
+  aciklama: string | null; miktar: string | null; teslim_tarihi: string | null;
+  makine_kodlari: string[];
+};
+
+// pdf-parse'ın sayfa render kancası: metni konumuyla birlikte JSON olarak döndürür.
+function konumluRender(pageData: any) {
+  return pageData
+    .getTextContent({ normalizeWhitespace: false, disableCombineTextItems: false })
+    .then((icerik: any) =>
+      JSON.stringify(
+        (icerik.items || [])
+          .filter((it: any) => (it.str ?? '').trim().length > 0)
+          .map((it: any) => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width || 0 }))
+      )
+    );
+}
+
+function trBuyuk(metin: string) {
+  return (metin ?? '')
+    .toLocaleUpperCase('tr-TR')
+    .replace(/İ/g, 'I').replace(/Ş/g, 'S').replace(/Ğ/g, 'G')
+    .replace(/Ü/g, 'U').replace(/Ö/g, 'O').replace(/Ç/g, 'C')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const merkez = (p: MetinParcasi) => p.x + p.w / 2;
+
+// Başlık satırını bulup her sütunun sınırlarını (komşu başlıkların orta noktası) çıkarır.
+function sutunSinirlariniBul(parcalar: MetinParcasi[]) {
+  const stokKoduBasligi = parcalar.find((p) => trBuyuk(p.str) === 'STOK KODU');
+  if (!stokKoduBasligi) return null;
+
+  const basY = stokKoduBasligi.y;
+  // "TESLİM" / "TARİHİ" iki satıra bölünebildiği için dar bir y penceresi taranır.
+  const basliklar = parcalar.filter((p) => Math.abs(p.y - basY) <= 12);
+
+  const merkezler: { anahtar: SutunAnahtari; x: number }[] = [];
+  const ekle = (anahtar: SutunAnahtari, p: MetinParcasi) => {
+    if (!merkezler.some((m) => m.anahtar === anahtar)) merkezler.push({ anahtar, x: merkez(p) });
+  };
+
+  for (const p of basliklar) {
+    const n = trBuyuk(p.str);
+    if (n === 'STOK KODU') ekle('stok_kodu', p);
+    else if (n === 'STOK ADI') ekle('stok_adi', p);
+    else if (n === 'ACIKLAMA') ekle('aciklama', p);
+    else if (n === 'MIKTAR') ekle('miktar', p);
+    else if (n === 'TESLIM' || n === 'TESLIM TARIHI' || n === 'TARIHI') ekle('teslim_tarihi', p);
+    else if (n === 'NOT') ekle('not', p);
+  }
+
+  if (!merkezler.some((m) => m.anahtar === 'stok_kodu')) return null;
+  if (!merkezler.some((m) => m.anahtar === 'stok_adi')) return null;
+
+  merkezler.sort((a, b) => a.x - b.x);
+  const sinirlar = merkezler.map((m, i) => ({
+    anahtar: m.anahtar,
+    sol: i === 0 ? -Infinity : (merkezler[i - 1].x + m.x) / 2,
+    sag: i === merkezler.length - 1 ? Infinity : (m.x + merkezler[i + 1].x) / 2,
+  }));
+
+  return { basY, sinirlar };
+}
+
+function tablodanKalemleriCikar(parcalar: MetinParcasi[]): Kalem[] | null {
+  const sutunBilgisi = sutunSinirlariniBul(parcalar);
+  if (!sutunBilgisi) return null;
+  const { basY, sinirlar } = sutunBilgisi;
+
+  const sutunuBul = (p: MetinParcasi): SutunAnahtari | null => {
+    const mx = merkez(p);
+    const bulunan = sinirlar.find((s) => mx >= s.sol && mx < s.sag);
+    return bulunan ? bulunan.anahtar : null;
+  };
+
+  // Tablo gövdesi: başlığın altı ile alt bilgi (onay bölümü) arası.
+  const altBilgiIsaretleri = ['DEPARTMAN SORUMLUSU ONAYI', 'SATIN ALMA SORUMLUSU', 'TALEP ONAYI', 'ONAY TARIHI :', 'ONAY TARIHI'];
+  let altSinir = -Infinity;
+  for (const p of parcalar) {
+    if (p.y >= basY) continue;
+    const n = trBuyuk(p.str);
+    if (altBilgiIsaretleri.some((isaret) => n.startsWith(isaret))) altSinir = Math.max(altSinir, p.y);
+  }
+
+  const govde = parcalar.filter((p) => p.y < basY - 4 && p.y > altSinir);
+  if (govde.length === 0) return null;
+
+  // Çapa satırlar = STOK KODU sütununda değer bulunan satırlar.
+  const capalar = govde
+    .filter((p) => sutunuBul(p) === 'stok_kodu')
+    .sort((a, b) => b.y - a.y);
+  if (capalar.length === 0) return null;
+
+  // Satır aralığından tolerans türet (çok satırlı hücreleri doğru çapaya bağlamak için).
+  let tolerans = 12;
+  if (capalar.length >= 2) {
+    const farklar = capalar.slice(1).map((c, i) => Math.abs(capalar[i].y - c.y)).sort((a, b) => a - b);
+    const ortancaFark = farklar[Math.floor(farklar.length / 2)];
+    if (ortancaFark > 0) tolerans = ortancaFark * 0.75;
+  }
+
+  const gruplar = capalar.map((c) => ({ capa: c, parcalar: [] as MetinParcasi[] }));
+  for (const p of govde) {
+    let enYakin = -1;
+    let enKisaMesafe = Infinity;
+    gruplar.forEach((g, i) => {
+      const mesafe = Math.abs(p.y - g.capa.y);
+      if (mesafe < enKisaMesafe) { enKisaMesafe = mesafe; enYakin = i; }
+    });
+    if (enYakin !== -1 && enKisaMesafe <= tolerans) gruplar[enYakin].parcalar.push(p);
+  }
+
+  const kalemler: Kalem[] = [];
+  for (const grup of gruplar) {
+    const hucreler: Record<string, MetinParcasi[]> = {};
+    for (const p of grup.parcalar) {
+      const sutun = sutunuBul(p);
+      if (!sutun) continue;
+      if (!hucreler[sutun]) hucreler[sutun] = [];
+      hucreler[sutun].push(p);
+    }
+
+    const hucreMetni = (sutun: SutunAnahtari) =>
+      (hucreler[sutun] || [])
+        .sort((a, b) => (Math.abs(a.y - b.y) > 1 ? b.y - a.y : a.x - b.x))
+        .map((p) => p.str.trim())
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const stokKodu = hucreMetni('stok_kodu');
+    if (!stokKodu) continue;
+
+    const stokAdi = hucreMetni('stok_adi');
+    const aciklama = hucreMetni('aciklama');
+    const miktar = hucreMetni('miktar');
+    const teslimHam = hucreMetni('teslim_tarihi');
+    const teslimTarihi = teslimHam.match(TARIH_DESENI)?.[0] || teslimHam || null;
+
+    // Makine kodları YALNIZCA AÇIKLAMA sütunundan alınır; böylece stok adındaki
+    // "SUN-FIX", "SKP-38" gibi ürün adı parçaları yanlışlıkla makine sanılmaz.
+    const makineKodlari = makineAdaylariniCikar(aciklama);
+
+    const satirMetni = `${stokKodu} — ${stokAdi}`
+      + (aciklama ? ` | Not: ${aciklama}` : '')
+      + (miktar ? ` | Miktar: ${miktar}` : '')
+      + (teslimTarihi ? ` | Teslim: ${teslimTarihi}` : '');
+
+    kalemler.push({
+      satir_metni: satirMetni,
+      stok_kodu: stokKodu,
+      stok_adi: stokAdi || null,
+      aciklama: aciklama || null,
+      miktar: miktar || null,
+      teslim_tarihi: teslimTarihi,
+      makine_kodlari: makineKodlari,
+    });
+  }
+
+  return kalemler.length > 0 ? kalemler : null;
+}
+
+// AÇIKLAMA metninde, fabrikada ZATEN KAYITLI olan bir makinenin adı geçiyor mu?
+// Tireli kod deseni ("FOM-MB021") dışındaki adlandırmaları da (örn. "PEM 1001")
+// yakalayabilmek için kullanılır. Yanlış eşleşmeyi önlemek adına ad, kelime
+// sınırlarıyla aranır ve çok kısa adlar (< 3 karakter) dikkate alınmaz.
+function aciklamadaGecenMakineler(
+  aciklama: string | null,
+  makineler: { id: string; ad: string }[]
+): { id: string; ad: string }[] {
+  if (!aciklama) return [];
+  const hedef = trBuyuk(aciklama);
+  return makineler.filter((m) => {
+    const ad = trBuyuk(m.ad);
+    if (ad.length < 3) return false;
+    const kacisli = ad.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^A-Z0-9])${kacisli}([^A-Z0-9]|$)`).test(hedef);
+  });
+}
+
+// Aynı makinenin farklı yazımlarını ("PEM 1001" / "PEM-1001" / "pem1001")
+// tek kayıt olarak görebilmek için karşılaştırma anahtarı.
+function makineAdiAnahtari(ad: string) {
+  return trBuyuk(ad).replace(/[^A-Z0-9]/g, '');
+}
+
+// AÇIKLAMA metninden makine adayı kodları çıkarır. Tireli kodlar önce alınır ve
+// metinden düşülür; böylece "FOM-MB021" içindeki "MB021" ikinci kez sayılmaz.
+function makineAdaylariniCikar(aciklama: string | null): string[] {
+  if (!aciklama) return [];
+  const tireliKodlar = Array.from(new Set(aciklama.match(MAKINE_KODU_DESENI) || []));
+  let kalan = aciklama;
+  for (const kod of tireliKodlar) kalan = kalan.split(kod).join(' ');
+  const digerKodlar = (kalan.match(MAKINE_ADI_DESENI) || []).map((k) => k.replace(/\s+/g, ' ').trim());
+  return Array.from(new Set([...tireliKodlar, ...digerKodlar]));
+}
+
+function metniAyristir(hamMetin: string, parcalar: MetinParcasi[] = []) {  const talepNoTarih = hamMetin.match(/(\d{2}\.\d{2}\.\d{4})\s*\n?\s*SATINALMA TALEP FORMU\s*\n?\s*(\d+)/i);
+  const bolum = hamMetin.match(/B[ÖO]L[ÜU]M\s*:?\s*(.+)/i);
+  const kisi = hamMetin.match(/K[İI]Ş[İI]\s*:?\s*(.+)/i);
+
+  const baslikBilgisi = {
+    tarih: talepNoTarih ? talepNoTarih[1] : null,
+    talep_no: talepNoTarih ? talepNoTarih[2] : null,
+    bolum: bolum ? bolum[1].trim() : null,
+    kisi: kisi ? kisi[1].trim() : null,
+  };
+
+  // Öncelik: sütun koordinatlarına göre ayrıştırma (güvenilir).
+  if (parcalar.length > 0) {
+    const tabloKalemleri = tablodanKalemleriCikar(parcalar);
+    if (tabloKalemleri) return { baslikBilgisi, kalemler: tabloKalemleri };
+  }
+
+  // Yedek yöntem: başlık satırı tanınamayan/farklı düzendeki PDF'ler için düz metin ayrıştırma.
+  const eslesmeler = [...hamMetin.matchAll(STOK_KODU_DESENI)];
+  const bitisIsaretleri = ['DEPARTMAN SORUMLUSU', 'SATIN ALMA SORUMLUSU', 'TALEP ONAYI', 'Onay Tarihi'];
+
+  const kalemler: Kalem[] = [];
+
+  if (eslesmeler.length > 0) {
+    for (let i = 0; i < eslesmeler.length; i++) {
+      const baslangic = eslesmeler[i].index as number;
+      let bitis = i + 1 < eslesmeler.length ? (eslesmeler[i + 1].index as number) : hamMetin.length;
+      for (const isaret of bitisIsaretleri) {
+        const idx = hamMetin.indexOf(isaret, baslangic);
+        if (idx !== -1 && idx < bitis) bitis = idx;
+      }
+      const blokHam = hamMetin.slice(baslangic, bitis).replace(/\s+/g, ' ').trim();
+      const stokKodu = eslesmeler[i][0];
+      const gerisi = blokHam.slice(stokKodu.length).trim();
+      const detay = gerisi.match(DETAY_DESENI);
+
+      let miktar: string | null = null;
+      let teslimTarihi: string | null = null;
+      let aciklamaKismi = gerisi;
+      if (detay) {
+        miktar = `${detay[1]} ${detay[2] || ''}`.trim();
+        teslimTarihi = detay[3];
+        aciklamaKismi = gerisi.slice(0, detay.index).trim();
+      }
+
+      // "Stok Adı" ile PDF'teki AÇIKLAMA (makine kodları) metni, satır kaydırma
+      // yüzünden ham metinde ayraçsız birleşik geliyor. Makine kodu deseninin
+      // ilk göründüğü noktadan böl: öncesi stok adı, sonrası açıklama.
+      const makineKodlari = makineAdaylariniCikar(aciklamaKismi);
+      let stokAdi = aciklamaKismi;
+      let ekAciklama = '';
+      if (makineKodlari.length > 0) {
+        const ilkKodIndex = aciklamaKismi.search(MAKINE_KODU_DESENI);
+        stokAdi = aciklamaKismi.slice(0, ilkKodIndex).trim();
+        ekAciklama = aciklamaKismi.slice(ilkKodIndex).trim();
+      }
+
+      const satirMetni = `${stokKodu} — ${stokAdi}`
+        + (ekAciklama ? ` | Not: ${ekAciklama}` : '')
+        + (miktar ? ` | Miktar: ${miktar}` : '')
+        + (teslimTarihi ? ` | Teslim: ${teslimTarihi}` : '');
+
+      kalemler.push({
+        satir_metni: satirMetni, stok_kodu: stokKodu, stok_adi: stokAdi || null,
+        aciklama: ekAciklama || null, miktar, teslim_tarihi: teslimTarihi,
+        makine_kodlari: makineKodlari,
+      });
+    }
+  } else {
+    // Tanınan bir stok kodu deseni bulunamazsa: genel satır satır dökümüne düş
+    hamMetin.split('\n').map((s) => s.trim()).filter((s) => s.length > 0).forEach((satir) => {
+      kalemler.push({ satir_metni: satir, stok_kodu: null, stok_adi: null, aciklama: null, miktar: null, teslim_tarihi: null, makine_kodlari: [] });
+    });
+  }
+
+  return { baslikBilgisi, kalemler };
+}
+
+export async function POST(req: NextRequest) {
+  const session = readSession();
+  if (!session || session.rol !== 'admin') {
+    return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
+
+  const formData = await req.formData();
+  const file = formData.get('file') as File | null;
+  if (!file) return NextResponse.json({ error: 'file gerekli' }, { status: 400 });
+
+  const buf = Buffer.from(await file.arrayBuffer());
+
+  let hamMetin = '';
+  let parcalar: MetinParcasi[] = [];
+  try {
+    const pdfParse = (await import('pdf-parse')).default;
+    const sonuc = await pdfParse(buf);
+    hamMetin = sonuc.text || '';
+
+    // İkinci geçiş: metni x/y koordinatlarıyla al (tablo sütunlarını ayırmak için).
+    try {
+      const konumlu = await pdfParse(buf, { pagerender: konumluRender } as any);
+      parcalar = (konumlu.text || '')
+        .split('\n\n')
+        .map((s: string) => s.trim())
+        .filter((s: string) => s.startsWith('['))
+        .flatMap((s: string) => {
+          try { return JSON.parse(s) as MetinParcasi[]; } catch { return []; }
+        });
+    } catch {
+      // Konum çıkarımı başarısız olursa düz metin ayrıştırmasıyla devam edilir.
+    }
+  } catch (err: any) {
+    return NextResponse.json({ error: `PDF okunamadı: ${err?.message || 'bilinmeyen hata'}` }, { status: 400 });
+  }
+
+  if (hamMetin.trim().length === 0) {
+    return NextResponse.json({ error: 'PDF içinde okunabilir metin bulunamadı (taranmış görsel PDF olabilir)' }, { status: 400 });
+  }
+
+  const { baslikBilgisi, kalemler } = metniAyristir(hamMetin, parcalar);
+
+  if (kalemler.length === 0) {
+    return NextResponse.json({ error: 'PDF içinde ayrıştırılabilir kalem bulunamadı' }, { status: 400 });
+  }
+
+  const supabase = supabaseAdmin();
+
+  const dosyaYolu = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+  let pdfUrl: string | null = null;
+  const { error: uploadErr } = await supabase.storage.from(BUCKET).upload(dosyaYolu, buf, { contentType: 'application/pdf' });
+  if (!uploadErr) {
+    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(dosyaYolu);
+    pdfUrl = urlData.publicUrl;
+  }
+
+  const { data: siparis, error: siparisErr } = await supabase.from('siparisler').insert({
+    dosya_adi: file.name,
+    pdf_url: pdfUrl,
+    ham_metin: hamMetin,
+    talep_no: baslikBilgisi.talep_no,
+    tarih: baslikBilgisi.tarih,
+    bolum: baslikBilgisi.bolum,
+    kisi: baslikBilgisi.kisi,
+    fabrika_id: session.fabrikaId,
+    yukleyen_id: session.id,
+  }).select('id').single();
+
+  if (siparisErr) return NextResponse.json({ error: siparisErr.message }, { status: 500 });
+
+  // Makine adı -> id önbelleği (aynı istek içinde aynı makine birden çok kalemde
+  // geçebilir, tekrar tekrar sorgulamamak/duplicate oluşturmamak için).
+  const makineIdOnbellek = new Map<string, string>();
+  // Fabrikadaki mevcut makinelerin normalize adı -> id eşlemesi. "PEM 1001" ile
+  // "PEM1001" gibi farklı yazımların ayrı kayıt oluşturmasını engeller.
+  const normalizeMakineHaritasi = new Map<string, string>();
+
+  async function makineIdBul(ad: string): Promise<string> {
+    const anahtarli = ad.trim();
+    if (makineIdOnbellek.has(anahtarli)) return makineIdOnbellek.get(anahtarli)!;
+
+    // Yazım farkı gözetmeksizin mevcut bir makineye denk geliyor mu?
+    const normAnahtar = makineAdiAnahtari(anahtarli);
+    if (normalizeMakineHaritasi.has(normAnahtar)) {
+      const id = normalizeMakineHaritasi.get(normAnahtar)!;
+      makineIdOnbellek.set(anahtarli, id);
+      return id;
+    }
+
+    const { data: mevcut } = await supabase
+      .from('makineler').select('id').eq('fabrika_id', session!.fabrikaId).eq('ad', anahtarli).maybeSingle();
+    if (mevcut) {
+      makineIdOnbellek.set(anahtarli, mevcut.id);
+      normalizeMakineHaritasi.set(normAnahtar, mevcut.id);
+      return mevcut.id;
+    }
+    const { data: yeni, error: yeniErr } = await supabase
+      .from('makineler').insert({ ad: anahtarli, fabrika_id: session!.fabrikaId }).select('id').single();
+    if (yeniErr) {
+      // Aynı anda başka bir kalem aynı makineyi oluşturmuş olabilir (unique çakışması) — tekrar oku.
+      const { data: tekrar } = await supabase
+        .from('makineler').select('id').eq('fabrika_id', session!.fabrikaId).eq('ad', anahtarli).single();
+      if (tekrar) {
+        makineIdOnbellek.set(anahtarli, tekrar.id);
+        normalizeMakineHaritasi.set(normAnahtar, tekrar.id);
+        return tekrar.id;
+      }
+      throw new Error(yeniErr.message);
+    }
+    makineIdOnbellek.set(anahtarli, yeni.id);
+    normalizeMakineHaritasi.set(normAnahtar, yeni.id);
+    return yeni.id;
+  }
+
+  // Fabrikadaki kayıtlı makineler: AÇIKLAMA metninde adı geçenleri tanımak için.
+  const { data: kayitliMakineler } = await supabase
+    .from('makineler').select('id, ad').eq('fabrika_id', session.fabrikaId);
+  const makineListesi = (kayitliMakineler || []) as { id: string; ad: string }[];
+  for (const m of makineListesi) {
+    const anahtar = makineAdiAnahtari(m.ad);
+    if (!normalizeMakineHaritasi.has(anahtar)) normalizeMakineHaritasi.set(anahtar, m.id);
+  }
+
+  let eslenenParcaSayisi = 0;
+  let sira = 0;
+  for (const k of kalemler) {
+    const { data: kalemKaydi, error: kalemErr } = await supabase.from('siparis_kalemleri').insert({
+      siparis_id: siparis.id,
+      fabrika_id: session.fabrikaId,
+      sira: sira++,
+      satir_metni: k.satir_metni,
+      stok_kodu: k.stok_kodu,
+      stok_adi: k.stok_adi,
+      aciklama: k.aciklama,
+      miktar: k.miktar,
+      teslim_tarihi: k.teslim_tarihi,
+    }).select('id').single();
+
+    if (kalemErr) return NextResponse.json({ error: kalemErr.message }, { status: 500 });
+
+    // Eşleşen makineler iki kaynaktan gelir:
+    //  1) AÇIKLAMA'da adı birebir geçen, sistemde KAYITLI makineler (örn. "PEM 1001")
+    //  2) Tireli makine kodu deseni (örn. "FOM-MB021") — yoksa yeni makine oluşturulur
+    const makineIdler = new Set<string>();
+    for (const m of aciklamadaGecenMakineler(k.aciklama, makineListesi)) makineIdler.add(m.id);
+    for (const makineKodu of k.makine_kodlari) {
+      try { makineIdler.add(await makineIdBul(makineKodu)); } catch { /* makine oluşturulamazsa atla */ }
+    }
+
+    if (makineIdler.size > 0 && k.stok_adi) {
+      for (const makineId of makineIdler) {
+        const { error: parcaErr } = await supabase.from('yedek_parcalar').insert({
+          fabrika_id: session.fabrikaId,
+          makine_id: makineId,
+          parca_kodu: k.stok_kodu,
+          parca_tanimi: k.stok_adi,
+          siparis_kalemi_id: kalemKaydi.id,
+          ekleyen_personel_id: session.id,
+        });
+        if (!parcaErr) eslenenParcaSayisi += 1;
+      }
+    }
+  }
+
+  // Yeni sipariş eklendi — bu fabrikadaki admin/süper admin personele push bildirimi gönder.
+  // Bildirim gönderimi başarısız olsa bile sipariş kaydı zaten tamamlandığı için isteğin
+  // geri kalanını etkilememesi için hataları yutuyoruz.
+  try {
+    const { data: bildirilecekler } = await supabase
+      .from('personel')
+      .select('id')
+      .eq('fabrika_id', session.fabrikaId)
+      .eq('aktif', true)
+      .in('rol', ['admin', 'superadmin']);
+
+    if (bildirilecekler && bildirilecekler.length > 0) {
+      await personellereBildirimGonder(
+        bildirilecekler.map((p) => p.id),
+        {
+          baslik: 'Yeni Sipariş Eklendi',
+          govde: `${baslikBilgisi.talep_no ? `Talep No: ${baslikBilgisi.talep_no}` : file.name}${baslikBilgisi.bolum ? ` · ${baslikBilgisi.bolum}` : ''}`,
+          url: `/panel/bakim/siparisler/${siparis.id}`,
+        }
+      );
+    }
+  } catch (err) {
+    console.error('Sipariş bildirimi gönderilemedi:', err);
+  }
+
+  return NextResponse.json({
+    ok: true, id: siparis.id, kalem_sayisi: kalemler.length,
+    talep_no: baslikBilgisi.talep_no, tarih: baslikBilgisi.tarih,
+    makine_eslesme_sayisi: eslenenParcaSayisi,
+  });
+}
+DOSYASONU
+
+mkdir -p 'app/api/assign'
+cat > 'app/api/assign/route.ts' << 'DOSYASONU'
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import { readSession } from '@/lib/session';
+import { personellereBildirimGonder } from '@/lib/push';
+
+export async function POST(req: NextRequest) {
+  const session = readSession();
+  if (!session || session.rol !== 'admin') {
+    return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
+
+  const { kayit_idler, personel_id } = await req.json();
+  if (!Array.isArray(kayit_idler) || kayit_idler.length === 0 || !personel_id) {
+    return NextResponse.json({ error: 'kayit_idler ve personel_id gerekli' }, { status: 400 });
+  }
+
+  const supabase = supabaseAdmin();
+
+  const { data: hedefPersonel } = await supabase
+    .from('personel').select('fabrika_id').eq('id', personel_id).single();
+  if (!hedefPersonel || hedefPersonel.fabrika_id !== session.fabrikaId) {
+    return NextResponse.json({ error: 'Personel bu fabrikaya ait değil' }, { status: 400 });
+  }
+
+  const { error } = await supabase
+    .from('ariza_kayitlari')
+    .update({ atanan_personel_id: personel_id, atama_tarihi: new Date().toISOString() })
+    .in('id', kayit_idler)
+    .eq('fabrika_id', session.fabrikaId);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  try {
+    await personellereBildirimGonder([personel_id], {
+      baslik: 'Size Yeni Arıza Atandı',
+      govde: kayit_idler.length === 1 ? '1 arıza kaydı size atandı' : `${kayit_idler.length} arıza kaydı size atandı`,
+      url: '/panel/bakim/bana-atananlar',
+    });
+  } catch (err) {
+    console.error('Atama bildirimi gönderilemedi:', err);
+  }
+
+  return NextResponse.json({ ok: true, atanan_sayi: kayit_idler.length });
+}
+DOSYASONU
+
+mkdir -p 'app/api/records'
+cat > 'app/api/records/route.ts' << 'DOSYASONU'
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import { readSession } from '@/lib/session';
+import crypto from 'crypto';
+import { personellereBildirimGonder } from '@/lib/push';
+
+export const maxDuration = 30;
+
+export async function GET(req: NextRequest) {
+  const session = readSession();
+  if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
+
+  const supabase = supabaseAdmin();
+
+  function sorguOlustur() {
+    let query = supabase
+      .from('ariza_kayitlari')
+      .select(`
+        id, sira_no, is_emri_detay_kodu, tezgah, vardiya, durus_kodu, durus_adi, baslangic, bitis, sure, sure_sn, aciklama, kalip_kodu,
+        kategori, aksiyon, hedef_tarih, tamamlanma_durumu, kok_neden_turu,
+        atanan_personel_id, personel:atanan_personel_id ( ad_soyad )
+      `)
+      .eq('fabrika_id', session!.fabrikaId)
+      .order('baslangic', { ascending: false });
+
+    // Personel her zaman sadece kendine atananları görür; admin normalde hepsini görür,
+    // ancak ?atanan=me ile admin de (veya personel de) sadece kendine atananları filtreleyebilir.
+    const atananParam = req.nextUrl.searchParams.get('atanan');
+    if (session!.rol === 'personel' || atananParam === 'me') {
+      query = query.eq('atanan_personel_id', session!.id);
+    }
+
+    const kategori = req.nextUrl.searchParams.get('kategori');
+    if (kategori) query = query.eq('kategori', kategori);
+
+    const durum = req.nextUrl.searchParams.get('durum');
+    if (durum) query = query.eq('tamamlanma_durumu', durum);
+
+    return query;
+  }
+
+  // Supabase/PostgREST tek istekte varsayılan olarak en fazla 1000 satır döner.
+  // Bu sınırı aşmak için 1000'erlik sayfalar halinde tüm sonuçları çekip birleştiriyoruz.
+  const SAYFA_BOYUTU = 1000;
+  let tumKayitlar: any[] = [];
+  let sayfa = 0;
+  while (true) {
+    const bas = sayfa * SAYFA_BOYUTU;
+    const bit = bas + SAYFA_BOYUTU - 1;
+    const { data, error } = await sorguOlustur().range(bas, bit);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    tumKayitlar = tumKayitlar.concat(data || []);
+    if (!data || data.length < SAYFA_BOYUTU) break;
+    sayfa += 1;
+    if (sayfa > 20) break; // güvenlik: en fazla 20.000 kayıt
+  }
+
+  return NextResponse.json({ kayitlar: tumKayitlar });
+}
+
+export async function POST(req: NextRequest) {
+  const session = readSession();
+  if (!session || session.rol !== 'admin') {
+    return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
+
+  const { tezgah, kategori, durus_adi, aciklama, atanan_personel_id, kalip_kodu } = await req.json();
+  if (!tezgah || !kategori || !durus_adi) {
+    return NextResponse.json({ error: 'Tezgah, kategori ve duruş adı gerekli' }, { status: 400 });
+  }
+  if (!['MA', 'BA', 'KA', 'RA', 'GT'].includes(kategori)) {
+    return NextResponse.json({ error: 'Geçersiz kategori' }, { status: 400 });
+  }
+
+  const supabase = supabaseAdmin();
+  const simdi = new Date().toISOString();
+
+  const { data, error } = await supabase.from('ariza_kayitlari').insert({
+    unique_key: `manuel-${crypto.randomUUID()}`,
+    fabrika_id: session.fabrikaId,
+    tezgah, kategori, durus_adi,
+    aciklama: aciklama || null,
+    kalip_kodu: kalip_kodu || null,
+    baslangic: simdi,
+    sure: 'Manuel kayıt',
+    atanan_personel_id: atanan_personel_id || null,
+    atama_tarihi: atanan_personel_id ? simdi : null,
+    yukleyen_id: session.id,
+    tamamlanma_durumu: 'Beklemede',
+  }).select('id, sira_no').single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (atanan_personel_id) {
+    try {
+      await personellereBildirimGonder([atanan_personel_id], {
+        baslik: 'Size Yeni Arıza Atandı',
+        govde: `${tezgah} — ${durus_adi}`,
+        url: '/panel/bakim/bana-atananlar',
+      });
+    } catch (err) {
+      console.error('Atama bildirimi gönderilemedi:', err);
+    }
+  }
+
+  return NextResponse.json({ ok: true, id: data.id, sira_no: data.sira_no });
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = readSession();
+  if (!session || session.rol !== 'admin') {
+    return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  }
+  if (!session.fabrikaId) return NextResponse.json({ error: 'Bu işlem için fabrika bağlamı gerekli' }, { status: 403 });
+
+  const { ids } = await req.json();
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return NextResponse.json({ error: 'ids gerekli' }, { status: 400 });
+  }
+
+  const supabase = supabaseAdmin();
+  // aksiyonlar tablosu ariza_kayit_id üzerinden "on delete cascade" olduğu için
+  // bağlı aksiyonlar da otomatik silinir.
+  const { error } = await supabase.from('ariza_kayitlari').delete().in('id', ids).eq('fabrika_id', session.fabrikaId);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true, silinen: ids.length });
+}
+DOSYASONU
+
+echo "Tamamlandi. Simdi: npm install && npm run build"
