@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { readSession } from '@/lib/session';
+import { personellereBildirimGonder } from '@/lib/push';
 
 export async function POST(req: NextRequest) {
   const session = readSession();
@@ -29,5 +30,16 @@ export async function POST(req: NextRequest) {
     .eq('fabrika_id', session.fabrikaId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  try {
+    await personellereBildirimGonder([personel_id], {
+      baslik: 'Size Yeni Arıza Atandı',
+      govde: kayit_idler.length === 1 ? '1 arıza kaydı size atandı' : `${kayit_idler.length} arıza kaydı size atandı`,
+      url: '/panel/bakim/bana-atananlar',
+    });
+  } catch (err) {
+    console.error('Atama bildirimi gönderilemedi:', err);
+  }
+
   return NextResponse.json({ ok: true, atanan_sayi: kayit_idler.length });
 }

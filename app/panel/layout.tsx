@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import BildirimButonu from '@/components/BildirimButonu';
 import { BOLUMLER, bolumdeIslemYapabilir, type BolumId } from '@/lib/bolumler';
 
 type Oturum = {
@@ -88,6 +89,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
         </nav>
 
         <div className="panel-kenar-alt">
+          <BildirimButonu />
           {adminMi && (
             <Link href="/admin/personel" className="panel-menu-oge">
               <Ikon ad="users" /><span>Personel</span>

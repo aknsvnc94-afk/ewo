@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { readSession } from '@/lib/session';
 import crypto from 'crypto';
+import { personellereBildirimGonder } from '@/lib/push';
 
 export const maxDuration = 30;
 
@@ -91,6 +92,19 @@ export async function POST(req: NextRequest) {
   }).select('id, sira_no').single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (atanan_personel_id) {
+    try {
+      await personellereBildirimGonder([atanan_personel_id], {
+        baslik: 'Size Yeni Arıza Atandı',
+        govde: `${tezgah} — ${durus_adi}`,
+        url: '/panel/bakim/bana-atananlar',
+      });
+    } catch (err) {
+      console.error('Atama bildirimi gönderilemedi:', err);
+    }
+  }
+
   return NextResponse.json({ ok: true, id: data.id, sira_no: data.sira_no });
 }
 

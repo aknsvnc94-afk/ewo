@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { readSession } from '@/lib/session';
+import { personellereBildirimGonder } from '@/lib/push';
 
 const BUCKET = 'siparis-pdfler';
 
@@ -473,6 +474,31 @@ export async function POST(req: NextRequest) {
         if (!parcaErr) eslenenParcaSayisi += 1;
       }
     }
+  }
+
+  // Yeni sipariş eklendi — bu fabrikadaki admin/süper admin personele push bildirimi gönder.
+  // Bildirim gönderimi başarısız olsa bile sipariş kaydı zaten tamamlandığı için isteğin
+  // geri kalanını etkilememesi için hataları yutuyoruz.
+  try {
+    const { data: bildirilecekler } = await supabase
+      .from('personel')
+      .select('id')
+      .eq('fabrika_id', session.fabrikaId)
+      .eq('aktif', true)
+      .in('rol', ['admin', 'superadmin']);
+
+    if (bildirilecekler && bildirilecekler.length > 0) {
+      await personellereBildirimGonder(
+        bildirilecekler.map((p) => p.id),
+        {
+          baslik: 'Yeni Sipariş Eklendi',
+          govde: `${baslikBilgisi.talep_no ? `Talep No: ${baslikBilgisi.talep_no}` : file.name}${baslikBilgisi.bolum ? ` · ${baslikBilgisi.bolum}` : ''}`,
+          url: `/panel/bakim/siparisler/${siparis.id}`,
+        }
+      );
+    }
+  } catch (err) {
+    console.error('Sipariş bildirimi gönderilemedi:', err);
   }
 
   return NextResponse.json({

@@ -43,6 +43,8 @@ fabrikasını seçer. Ayrıca tüm fabrikalardaki personeli yönetebilen bir
    - `supabase/schema_v19_proje_kaliplari.sql`
    - `supabase/schema_v20_siparis_kalem_sutunlari.sql` (sipariş PDF: stok adı + açıklama sütunları)
    - `supabase/schema_v21_bolumler.sql` (bölüm bazlı yapı: bakım / kalite / üretim)
+   - `supabase/schema_v22_yardimci_tesis.sql` (Yardımcı Tesis Kontrol: AnKA GLC izleme/kontrol)
+   - `supabase/schema_v23_push_bildirimleri.sql` (Web Push bildirim abonelikleri)
      veri geriye dönük olarak "Plaskar" fabrikasına atanır)
 3. İlk fabrikanı (Plaskar zaten `schema_v10` ile otomatik oluşuyor) veya yeni bir
    fabrika daha eklemek istersen:
