@@ -9,7 +9,7 @@ export const maxDuration = 60;
 
 function makeUniqueKey(row: Record<string, any>): string {
   // Aynı arıza kaydı ERP'den tekrar geldiğinde üzerine yazmamak için
-  // tezgah + başlangıç + duruş kodu + iş emri detay kodu birleşimi kullanılır.
+  // tezgah + başlangıç + duruş kodu + iş emri detay kodu + süre birleşimi kullanılır.
   const raw = [
     row.tezgah, row.baslangic, row.durus_kodu, row.is_emri_detay_kodu, row.sure_sn,
   ].map((v) => (v ?? '').toString().trim()).join('|');
@@ -43,9 +43,20 @@ export async function POST(req: NextRequest) {
     yukleyen_id: session.id,
   }));
 
+  // 1) Dosya İÇİNDEKİ tekrarları ayıkla.
+  // ERP bazen aynı arızayı iki kez yazıyor (sadece BİTİŞ ms farkıyla); bunlar aynı
+  // unique_key'i üretir ve tek insert içinde unique constraint hatasına yol açar.
+  const tekilMap = new Map<string, Record<string, any>>();
+  for (const k of kayitlar) {
+    if (!tekilMap.has(k.unique_key)) tekilMap.set(k.unique_key, k);
+  }
+  const tekilKayitlar = Array.from(tekilMap.values());
+  const dosyaIciMukerrer = kayitlar.length - tekilKayitlar.length;
+
   const supabase = supabaseAdmin();
 
-  const keys = kayitlar.map((k) => k.unique_key);
+  // 2) Veritabanında zaten olanları ayıkla.
+  const keys = tekilKayitlar.map((k) => k.unique_key);
   const { data: existing, error: existingErr } = await supabase
     .from('ariza_kayitlari')
     .select('unique_key')
@@ -57,7 +68,7 @@ export async function POST(req: NextRequest) {
   }
 
   const existingSet = new Set((existing || []).map((e) => e.unique_key));
-  const yeniKayitlar = kayitlar.filter((k) => !existingSet.has(k.unique_key));
+  const yeniKayitlar = tekilKayitlar.filter((k) => !existingSet.has(k.unique_key));
 
   if (yeniKayitlar.length === 0) {
     return NextResponse.json({
@@ -68,21 +79,30 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const { error: insertErr } = await supabase.from('ariza_kayitlari').insert(yeniKayitlar);
+  // 3) Son güvenlik ağı: arada başka bir yükleme aynı kaydı eklemiş olsa bile
+  // hata vermeden atla (ON CONFLICT DO NOTHING). Dönen satırlar = gerçekten eklenenler.
+  const { data: eklenenler, error: insertErr } = await supabase
+    .from('ariza_kayitlari')
+    .upsert(yeniKayitlar, { onConflict: 'fabrika_id,unique_key', ignoreDuplicates: true })
+    .select('kategori');
+
   if (insertErr) {
     return NextResponse.json({ error: insertErr.message }, { status: 500 });
   }
 
+  const eklenenSayi = eklenenler?.length ?? 0;
+
   const kategoriSayaci: Record<string, number> = {};
-  yeniKayitlar.forEach((k) => {
+  (eklenenler || []).forEach((k) => {
     kategoriSayaci[k.kategori] = (kategoriSayaci[k.kategori] || 0) + 1;
   });
 
   return NextResponse.json({
     message: 'Yükleme başarılı',
     toplam_satir: toplamSatir,
-    eklenen: yeniKayitlar.length,
-    atlanan_mukerrer: kayitlar.length - yeniKayitlar.length,
+    eklenen: eklenenSayi,
+    atlanan_mukerrer: kayitlar.length - eklenenSayi,
+    dosya_ici_mukerrer: dosyaIciMukerrer,
     kategori_dagilimi: kategoriSayaci,
   });
 }
